@@ -552,7 +552,7 @@ pub mod draft_reddy_cose_jose_pqc_hybrid_hpke {
     pub type HPKE9MlKem768X25519Aes256 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, aes_gcm::Aes256Gcm>;
 
     /// Cipher suite for JOSE-HPKE in Base Mode that uses the X25519 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the ChaCha20Poly1305 AEAD
-    #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-chacha20poly1305"))]
+    #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-chacha20poly1305", feature="rustcrypto-hmac", feature="rustcrypto-sha2"))]
     pub type HPKE10MlKem768X25519ChaCha20Poly1305 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, chacha20poly1305::ChaCha20Poly1305>;
 
     /// Cipher suite for JOSE-HPKE in Base Mode that uses the P-384 + ML-KEM-1024 Hybrid KEM, the SHAKE256 KDF, and the AES-256-GCM AEAD

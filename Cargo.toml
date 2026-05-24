@@ -17,7 +17,7 @@ rustcrypto-k256 = ["dep:k256", "kems/rustcrypto-k256"]
 rustcrypto-x25519 = [ "dep:x25519-dalek", "kems/rustcrypto-x25519" ]
 rustcrypto-x448 = ["dep:x448", "kems/rustcrypto-x448"]
 rustcrypto-ml-kem = ["dep:ml-kem", "kems/rustcrypto-ml-kem"]
-rustcrypto-hmac = ["dep:hmac"]
+rustcrypto-hmac = ["dep:hmac", "kems/rustcrypto-hmac"]
 rustcrypto-chacha20poly1305 = ["dep:chacha20poly1305"]
 
 [dependencies]
