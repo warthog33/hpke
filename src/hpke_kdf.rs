@@ -462,10 +462,10 @@ where
     fn derive_exported_value<L: ArraySize> (&self, exporter_secret: &Array<u8, Self::LE>, exporter_context: &[u8]) 
         -> Result<Array<u8,L>, ()>
     {
-        self.kdf.derive_self_secret_label_others::<L>(
+        self.kdf.derive_self_secret_label_other::<L>(
             exporter_secret, 
             b"sec", 
-            [&L::U16.to_be_bytes(), exporter_context]
+            exporter_context
         ).map_err(|_|())
     }
     

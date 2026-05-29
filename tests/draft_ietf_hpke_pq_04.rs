@@ -1,210 +1,22 @@
-//use std::marker::PhantomData;
 
-//use aead::{OsRng};
-
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
-use hex_literal::hex;
-use hpke::hpke_types::apple::HpkeIesXwingMl768X25519Sha256Aes256Gcm;
-use hpke::hpke_types::draft_ietf_xwing::HpkeXwingMlKem768X25519;
-//use kems::apple_hpke::HybridKemXwing;
-//use kems::draft_ietf_hpke_pq_01::HybridKemQsfX25519MlKem768;
-use kems::xwing::XwingMlKem768X25519;
-//use hpke::ReduceSeed;
-use rand_core::OsRng;
-use kems::EncapsulateDeterministic2;
-use kems::EncodeSeed;
 use aead::Payload;
-use kems::GetEncapsulator;
-
-
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-x25519", feature="rustcrypto-sha2", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesKitchenSinkMl768X25519Sha256Aes128Gcm;
-
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p384", feature="rustcrypto-sha2", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesQsfMl1024P384Sha256Aes128Gcm;
-//#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p256", feature="rustcrypto-sha2", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-//use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesQsfMl768P256Sha256Aes128Gcm;
-
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-x25519", feature="rustcrypto-sha3"))]
-use kems::draft_irtf_cfrg_hybrid_kems::{HybridCapsulatorKitchenSinkMlKem768X25519};
-use kems::{Array, Capsulator, EncodedSizeUser2, GenerateCapsulatorFromSeed};
+use hex_literal::hex;
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem512Sha256Aes128Gcm};
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768P256HkdfSha256Aes128Gcm};
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768X25519Shake256Cha20Poly1305, HpkeIesMlKem768P256Shake128Aes256Gcm, HpkeIesMlKem768X25519Shake128ChaCha20Poly1305};
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768Sha256Aes128Gcm};
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem1024TurboShake256Aes128Gcm, HpkeKemMlKem1024,HpkeIesP384Shake256Aes256Gcm};
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem1024Sha384Aes256Gcm,HpkeIesMlKem1024P384HkdfSha256Aes256Gcm};
+use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesX25519TurboShake128ChaCha20Poly1305;
+use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesX448TurboShake256ChaCha20Poly1305;
+use kems::{Capsulator, EncodedSizeUser2,EncapsulateDeterministic2,EncodeSeed};
 use kems::generic_array::GenericArray;
-use kems::{Encapsulate, Decapsulate};
-mod common;
-
-
-
-
-
-#[test]
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-fn test_ml_kem_512_hpke () {
-    use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768Sha256Aes128Gcm};
-
-    //let (encryptor, decryptor) = HpkeIesMlKem768Sha256Aes128Gcm::generate(&mut OsRng);
-    let (encryptor, decryptor) = HpkeIesMlKem768Sha256Aes128Gcm::derive_pair_from_seed(&[1u8;64]).unwrap();
-    
-    let (encapsulated_key, encrypted_payload) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"info", None).unwrap();
-
-    let decrypted = decryptor.single_shot_open(&encapsulated_key, b"info", encrypted_payload.as_slice(), None).unwrap();
-
-    assert_eq!( decrypted, b"Hello World");
-}
-
-
-
-#[test]
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-fn test_ml_kem_768_hpke () {
-    use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeKemMlKem768, HpkeIesMlKem768Sha256Aes128Gcm};
-
-    //let mut pred_rng = common::PredictableRng::new(&[0u8;32]);
-    let (encapsulator, decapsulator) = HpkeKemMlKem768::derive_from_seed(&[2u8;64].into());
-    let encapsulator_as_bytes = encapsulator.as_bytes();
-        
-    //let encryptor = hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_encapsulator(encapsulator);
-    let encryptor = HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_bytes(&encapsulator_as_bytes);
-    let (encapsulated_key, encrypted_payload) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"info", None).unwrap();
-
-    let decryptor = HpkeIesMlKem768Sha256Aes128Gcm::decryptor_from_decapsulator(decapsulator);
-    let decrypted = decryptor.single_shot_open(&encapsulated_key, b"info", encrypted_payload.as_ref(), None).unwrap();
-
-    assert_eq! ( decrypted, b"Hello World" );
-}
-
-#[test]
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-fn test_ml_kem_1024_hpke () {
-    //let (priv_key, pub_key) = MlKem1024::generate(&mut OsRng);
-
-    use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem1024Sha384Aes256Gcm, HpkeKemMlKem1024};
-    //let (encapsulator, decapsulator) = MlKemWithAddKeyDer::<MlKem1024, U32>::generate(&mut OsRng);
-    let (encapsulator, decapsulator) = HpkeKemMlKem1024::generate(&mut OsRng);
-    //let priv_key = decapsulator.as_ref();
-    //let pub_key = encapsulator.as_ref();
-    
-
-    //let encapsulator = MlKemEncapsulator::<MlKem1024, <MlKem1024 as KemCore>::EncapsulationKey, U32>::from(pub_key.clone());
-    //let (ek, ss_send) = encapsulator.try_encap(&mut OsRng, &pub_key).unwrap();
-    let (ek, ss_send) = encapsulator.encapsulate(&mut OsRng).unwrap();
-
-    //let decapsulator = MlKemDecapsulator::<MlKem1024>::new(priv_key.clone());
-    //let ss_recv = decapsulator.try_decap(&ek).unwrap();
-    let ss_recv = decapsulator.decapsulate(&ek).unwrap();
-
-    assert_eq! ( ss_send, ss_recv);
-    
-    // pub type HpkeIesMlKem1024Sha256Aes128Gcm = HpkeIes<MlKemCapsulator<MlKemWrapper<MlKem1024>>, {kem_id::ML_KEM_768}, 
-    //                                      Hkdf<Sha256>, {kdf_id::HKDF_SHA256}, aes_gcm::Aes128Gcm, {aead_id::AES_128_GCM}>;
-
-    //let encryptor = HpkeIesMlKem1024Sha256Aes128Gcm::new_encryptor();
-    let encryptor = HpkeIesMlKem1024Sha384Aes256Gcm::encryptor_from_encapsulator(encapsulator);
-    let (ek, result2) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"info", None).unwrap();
-
-    //let decryptor = HpkeIesMlKem1024Sha256Aes128Gcm::new_decryptor(priv_key.clone());
-    let decryptor = HpkeIesMlKem1024Sha384Aes256Gcm::decryptor_from_decapsulator(decapsulator); //new_decryptor(priv_key.clone());
-    let result3 = decryptor.single_shot_open(&ek, b"info", result2.as_ref(), None).unwrap();
-
-    assert_eq! ( result3, b"Hello World");
-}
-
-
-
-#[test]
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p256", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-fn test_ml_key_p256_hpke() {
-    use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem768P256Shake256Aes128Gcm;
-    
-
-    // let (pub_key, priv_key) = HybridKem::<
-    //         MlKemWithAddKeyDer<MlKem768>, 
-    //         EcdhKem<NistP256, EcCombinerNoPubKeys<PassThroughKdf>, U32, EcCompressedEncoder<NistP256>, ReduceSeed>,
-    //         //QsfCombiner<Okdf3::<sha3::Sha3_256, u0>, QsfLabelMlKem768P256>, U32>::generate(&mut OsRng);
-    //         QsfCombiner<Okdf3::<sha3::Sha3_256, u0>, QsfLabelMlKem768P256>, 
-    //         ExpandSeed<typenum::U32, kdfs::cshake::XofKdf<sha3::Shake256>>>::generate(&mut OsRng);
-
-    let (encryptor, decryptor) = HpkeIesMlKem768P256Shake256Aes128Gcm::derive_pair_from_seed(&[2u8;32]).unwrap();
-
-    //let encryptor = HpkeQsfP256MlKem768Shake256Aes128Gcm::encryptor_from_encapsulator(pub_key);
-    //let (encryptor, decryptor) = HpkeIesQsfMl768P256Sha256Aes128Gcm::generate(&mut OsRng);
-    let (encapped_key, ciphertext) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"Info", None).unwrap();
-
-    //let decryptor = HpkeQsfP256MlKem768Shake256Aes128Gcm::decryptor_from_decapsulator(priv_key);
-    let plaintext = decryptor.single_shot_open(&encapped_key, b"Info", ciphertext.as_ref(), None).unwrap();
-
-    assert!( plaintext == b"Hello World");
-}
-
-
-#[test]
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-x25519", feature="rustcrypto-sha2", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-fn test_ml_key_x25519_hpke() {
-
-    let (encapsulator, decapsulator) = HybridCapsulatorKitchenSinkMlKem768X25519::generate(&mut OsRng);
-    
-    let encryptor = HpkeIesKitchenSinkMl768X25519Sha256Aes128Gcm::encryptor_from_encapsulator(encapsulator);
-    let (encapped_key, ciphertext) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"Info", None).unwrap();
-
-    let decryptor = HpkeIesKitchenSinkMl768X25519Sha256Aes128Gcm::decryptor_from_decapsulator(decapsulator);
-    let plaintext = decryptor.single_shot_open(&encapped_key, b"Info", ciphertext.as_ref(), None).unwrap();
-
-    assert!( plaintext == b"Hello World");
-}
-
-#[test]
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p384", feature="rustcrypto-sha2", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-fn test_ml_key_1024_p384_hpke() {
-    
-    // let (encapsulator, decapsulator) = HybridKem::<
-    //         MlKemWithAddKeyDer<MlKem1024>, 
-    //         EcdhKem<NistP384, EcCombinerNoPubKeys<PassThroughKdf>, U48, EcCompressedEncoder<NistP384>, ReduceSeed>,
-    //         QsfCombiner<Okdf3::<sha3::Sha3_256, u0>, QsfLabelMlKem1024P384>, 
-    //         ExpandSeed<typenum::U32, kdfs::cshake::XofKdf<sha3::Shake256>>>::generate(&mut OsRng);
-
-    let (encapsulator, decapsulator) = kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384::generate(&mut OsRng);
-
-    let encryptor = HpkeIesQsfMl1024P384Sha256Aes128Gcm::encryptor_from_encapsulator(encapsulator);
-    let (encapped_key, ciphertext) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"Info", None).unwrap();
-                                                    
-    let decryptor = HpkeIesQsfMl1024P384Sha256Aes128Gcm::decryptor_from_decapsulator(decapsulator);
-    let plaintext = decryptor.single_shot_open(&encapped_key, b"Info", ciphertext.as_ref(), None).unwrap();
-
-    assert!( plaintext == b"Hello World");
-}
-
-///
-/// Sample using an xcode project which uses the new apple APIs for hybrid hpke
-/// 
-#[test]
-fn test_apple_hpke_xwing() {
-    let info = hex!("0408");
-
-    let seed = &BASE64_STANDARD.decode("NqAfhJbWnDMut0NWwZjOTD4YhLmfe74jwKbY/txpfpE=").unwrap();
-    let public_key = &BASE64_STANDARD.decode("9Pe9i/LE05J9kIqUDQqsQldheKiWezZoX5JJOUJYZtOmkmWfEmZx3RwHASK6bouTZhcZnINJBQp98tKjNIA1BihVMASeIcd1jwpln3WCBDDBivS7ReK+oFlUCaWcwYdOZGN4+tyKNuC5NzFrDCRXz2MGoCUV2Ulojbd/6VRnPNNbMvxCoOS94SZxKAgcSmJoGzQn+OJt5rQdHyvA7OsJn6VtLpgCtCOO+6qOFcMrz8gbiucgAAUUKBxf9uMKNKUd02c9C8U00pGqTtKiC6E8GbcihIIcrhKHMLkx/6XPOwIp5wqE8qy3nEqG1dPB2KArfmKXkFgl9iWRw4kPjKAlOzSz02EO17wDDXuWbUcIoXrFwbobomdJDAY/6zeuTfLCDNMDAmFr4ZoCHDdEsaI3dLdWCvF+x8gbiIMkdtq05yY6RBmhsBtkOVd2HloCcmSVV/wAYEdPm5l9E/NqhMccIeaCV+HAuGdzkxKCiigCyXEbAOQ8uvyil/bEaaXH7pKdz2Ro2bpAGjOQ0btvy8IfPhxUzBAM0NjNIZyyE0Bx8ssZKZelDfBWxyETkcy2a8A8vGM7t5oaHqWch4QuOzzFeLq+azIZU2Ocz3chuYVQoiZ5WjKZu7W6S8cP8nvKTFNgxplLEiCTfDesJqIi0oTDUjGgvbhEa3sFKeO4gzY57wZoLrUmbfs4psgdYmPEQqGm81J9d8WY9rLPMTlRM7TDXpVF0QSJpue8YpZnLzGdurWqWsOxj/hOswOMgMsdVTaF7gCQohV0eDh7NDBUVheFZAxodUeJvkhf86FGafC/JaGIZgtAfGa7AXCN3tzBliCrf4GDvIEwHCCzyAM8T8s3JFjP67ynWCoaGph8WiPFfYCmhPq1lCcDtQe2GVjDkUXPHCsaK3G2NXPGjUfF4oGj6IyA0YxniXuWefuE6FZw1NF1kimrmhqr21x7tRuY9xSn6nYZbegQ+xdJ/GGPkXkb38Widcoot6WpLgd7VbN1bOYyIHYd3DU4F+UrfepIQqRS83hPYVzGF+tA07FtoQorI+myVGBbKjAwaZWtDNpXOPaoSCCfqcgvSAqduwiBugwa6fa3SFghMACHcaW0/GFY6JfAdKsqC6h+ZVGLvncu/eAs6BGuWhdIhcYoPbRnrSgL/2EMhJxgRzQUTwqq4MF9QNw8EgkPP5dfMqyGHIW27mvDWrwvj3wiftoIrRR3g0gL6FFUU2kEZ8hPFBHExYIILgMYUxmAuUFRs+ezxlmyiIMcgXAGu+QK77NevSOJEOkqnZdsRZeEqSoODTqx8nCrBZMmoiKdxfXOz+sXmJGsp5RP2PIB2da1WnaKCgjL4ABvBBCQo0URpbPHROACYKSdOAGtkquxpieLu0ClGqQkWJEqXfad+SW4hSm7QGuXBJxWghiNu9q3o7aZYZF0djE6LuDHt8eMr5yTEWRCxrYoiOMTM7g15MQLn4wLEBxxMvilmZkH9gUCiWJmG7N6t9W84tl7NRJGPHp+zjZbT4jLX9Ki5ngAv2WiV6h6KJtYTObNgS2Zs91sFlBUq5rHAt3QvZ59unbkJIFmfxGblptTJQDBbuIsXbFyl6bkmb7314wjquR+pHOh0A9GxnHS8b76HQ==").unwrap();
-    let encapsulated_key = &BASE64_STANDARD.decode("bBcrMpyzvFLUFKU5vwewlxn9UXPwMFi3lJFJhCQNGpiGOWyEnhPt1nkBfQDZ3rGWCdDfM97NtWWoPkDywAUaytcUCXEXpHbxLgk5hxLmArOMK5p+8YVFBqdhVlN6Ivd+G5TKKZvn0BPElNHNALsyXXrjujVYB8IqYFaDa+WktCvS9n3IbIFZ/NPIFjcvkl3i/3QA0p+bKvJHmpu5b4ZtWEvtOwtDYTU62IWEYUi6grq611FEwE0X+TEm+XEU/QVpgi01LzpLC81M0LAa5UWxzCCel0Y6v/GkdmvVjqygXN4m7re6KeVUcpZuDzGXARKazMgpLHVExAjeD5BAM8r6BD9noOb43LQOYExjgh9kmTEFYKyFRTRj3nUkADbnqrwsu1/jkbR+fd1rGfa1MxnviQ+RcM5dUVR6TUH+eHTyGAKDz9y315YnBynrINJ0GWyZ0Na8PEDUzdzT0AKRCHU7yz90IEb6BaWlIcLbxa/cSYeUgkO/5CxoWmpJxsrVEpCF8AsS8yHjWiTKoLSos2KcsLN3PBxdDxG4Mbf0BEwdNl3TiYwM1GAngtkeQDmzYK42502H3dZkDbCjDfIWKl2V6Dt1r/k+np1Qau7eBTgRyCsXdMjN90nJCCqI9F+RKf7zjtFWye6682Tvkc2kqv2+7YCvgeoX59mdgCBxlT84M0Sz64y++WhLOFusOsSAvH8BWiQo3IMPjX5I9kLMRWGDtSZYXrd2kXi/DmVDSLU7BJr8ljrwdlrkXDcsOhGb7K1q74pWshRnFIPx4G9lUR5D6iP9tHtYgdjbMrc6EQe+oRG/+hEXIqGd+xowtPoExtSYrrxO6WpBYhH0CFeZ/PGDHNe1QDLLyCLNykUKq2ZziJkDzfeEvFU7db5bTPJ5hy0FpWdYQQ0tQuy50v0JnaYjV9UX77XzMWYFNWMbyhIrLycfJddDj78ssNApQtzaoaT98VPLmT6+AZODD1La9LXqWXwpIf8xVky6DwGFvQU4wPR8LRlM3uu4JYEmck/8L3KaenHztO7SYhzk2IL+whs3mVtUHxkPEeSAGPK+TQA0nQmTfYTwAgeR0IcLPTfpERnPf3r3OhSCIbuvry3YbtWic+xmAenlIRsxyWwUaGW7u1Bq2BshNbq9oppX4NWVA1gly1F5ag6bNS6A9UhEGpPnxe/ZhF6O5PbhZIgGF0T6Z3WnRzgGfYZ8Q4eR3hvnBE3voHtEQY938dCQOqfu5E7ca4e4YJMb5yh5Eh7kOOnH4D/7tDQVHjTBwb3f3A/GWNxu5jEXd75dH3+1i1lssKGm8PSzVVRdpa0xrj73nTVbFfVuM+zCIKgpvXFGvPAnIArOe62sj1aoFPJaQdaFozv0Buwk22sB8pxWedmJ2pXsn0kAyOdDN6M+JMbFtzwhvmzbhnc0sKLH1L69pZOmwuTjjIUUOEGgNUF9Xt+Ml1Qeiy4lgsD+VQlRDE4Gh6DaaC5CpOD5HAU+nzP0KhAFg2dbMw==").unwrap();
-    let ciphertext = &BASE64_STANDARD.decode("S/eqVx5Rm0KZzVPKSnGwYqD30dW0").unwrap();
-
-    //let (encapsulator, decapsulator) = XwingMlKem768X25519::derive_from_seed(&Array::try_from(seed.as_slice()).unwrap());
-    let decapsulator = <HpkeXwingMlKem768X25519 as Capsulator>::Decapsulator::from_seed_bytes(&Array::try_from(seed.as_slice()).unwrap());
-    let encapsulator = decapsulator.get_encapsulator();
-
-    assert_eq! ( encapsulator.as_bytes().as_slice(), public_key);
-    
-    let decryptor = HpkeIesXwingMl768X25519Sha256Aes256Gcm::decryptor_from_decapsulator(decapsulator);
-
-    let decrypted = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
-
-    assert_eq! ( decrypted, b"hello");
-}
-
-
-
+use p256::U32;
 
 // draft_ietf_hpke_pq_04
 // A.1.  ML-KEM-512, HKDF-SHA256, AES-128-GCM
 #[test]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_1 () {
     //A.1.1.  Base Setup Information
@@ -212,8 +24,6 @@ fn test_draft_ietf_hpke_pq_04_a_1 () {
     //   kem_id: 64
     //   kdf_id: 1
     //   aead_id: 1
-
-    use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem512Sha256Aes128Gcm};
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
         3230353537323665");
     let ikmE = hex!("f98936e15de97b6ac920c54f4009166401f882220b8ef2df485f9c077d728ced");
@@ -272,18 +82,20 @@ fn test_draft_ietf_hpke_pq_04_a_1 () {
        f8723f299bdbc5b8f65479ffdd328931afbcd522f");
     let shared_secret = hex!("6209eeb3c3fdf8aeba0d285bf0098f4b748bd630f78990f138f9cd0
                  e8023a264");
-    let key = hex!("53400b5a4cc75259e3bdb222e1081f56");
+    let _key = hex!("53400b5a4cc75259e3bdb222e1081f56");
     let base_nonce = hex!("e4f3c7a0c8f2512c6993dee2");
     let exporter_secret = hex!("d5a1a92f0f3e88334c14d93e3a999bfab39776e63ed635cb28b59
                    e958e563ada");
-
-    //pub type HpkeIesQsfP256MlKem768Shake128Aes256GcmXX = hpke::HpkeIes::<ConcreteMlKem768P256_2, hpke::hpke_types::sha2_kdfs::HpkeHkdfSha256, aes_gcm::Aes128Gcm, hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdf2::<hpke::kem_id::QsfKemMlKem768P256Shake256Sha3256>>;
 
     let (encryptor, decryptor) = HpkeIesMlKem512Sha256Aes128Gcm::derive_pair_from_seed(&ikmR).unwrap();
     
     assert_eq!(encryptor.encapsulator.as_bytes().as_slice(), pkRm.as_slice() );
     assert_eq!(decryptor.decapsulator.as_bytes().as_slice(), &skRm);
     
+    let (enc_calc2, shared_secret2) = encryptor.encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    assert_eq!( &enc_calc2.as_ref(), &enc);
+    assert_eq!( shared_secret2, shared_secret);
+
     let encryptor2 = HpkeIesMlKem512Sha256Aes128Gcm::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
     assert_eq!(encryptor2.encapsulator.as_bytes().as_slice(), &pkRm);
     
@@ -299,7 +111,7 @@ fn test_draft_ietf_hpke_pq_04_a_1 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
       30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("e4f3c7a0c8f2512c6993dee2");
+    let _nonce = hex!("e4f3c7a0c8f2512c6993dee2");
     let ct = hex!("9258af357e97f286bf7b5779f0514184651b4e95f6c02febe3d3cf45536738b0b5
       d6d1c1fa6ec8a2ed1ec3a14e107736510aa6febe6996b5eb192ed5a6a8c1860b74
       08992fcb30eb14cb");
@@ -313,7 +125,7 @@ fn test_draft_ietf_hpke_pq_04_a_1 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
       30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("e4f3c7a0c8f2512c6993dee3");
+    let _nonce = hex!("e4f3c7a0c8f2512c6993dee3");
     let ct = hex!("f2e232e9c8f2605f7b9bd7ef64d1c7e3048490125407a6140589ae6e661b164e2b
       0b091a46626d005fbe40f5eadcf27c21908678b4dd93c1106a8f82e3c819f13966
       a4c866393a060f4d");
@@ -322,6 +134,23 @@ fn test_draft_ietf_hpke_pq_04_a_1 () {
     assert_eq!( ct2, ct);
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
+
+    // Exporter
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+    
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("7083d75d22e2bf9d1bf257aeb440a6d080573af13907d546d7a859 55dba938fd");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("03cfd35156cfd4f36eb3668eb0cbbaf4cecad2b9a8e75e007cd413 20aca69b70");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+
 }
 
 
@@ -330,7 +159,7 @@ fn test_draft_ietf_hpke_pq_04_a_1 () {
 // draft_ietf_hpke_pq_04
 // A.2. ML-KEM-768, HKDF-SHA256, AES-128-GCM
 #[test]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_2 () {
     //  A.2.1. Base Setup Information
@@ -338,8 +167,6 @@ fn test_draft_ietf_hpke_pq_04_a_2 () {
     // kem_id: 65
     // kdf_id: 1
     // aead_id: 1
-
-    use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem768Sha256Aes128Gcm;
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
       3230353537323665");
     let ikmE = hex!("4b3d28ac17e3aadfe767671928e6c0d26c346d4c7dfcf1db0994d131fd76aaba");
@@ -420,7 +247,7 @@ fn test_draft_ietf_hpke_pq_04_a_2 () {
      75da1248a863766d95b2c5a2de36b47");
     let shared_secret = hex!("4f808592f5b6325b866e7d90e48bead8ec36ae17247cf3a1370d46c
                582dad42e");
-    let key = hex!("00fc412edb7a5adc4a2994869d1016ef");
+    let _key = hex!("00fc412edb7a5adc4a2994869d1016ef");
     let base_nonce = hex!("2a2bd95954150f73d200005e");
     let exporter_secret = hex!("3d46ed98c5a563ceada359aee128d69c81704edeba9607700cfe2
                  bf13472db88");
@@ -429,6 +256,9 @@ fn test_draft_ietf_hpke_pq_04_a_2 () {
     
     assert_eq!(encryptor.encapsulator.as_bytes().as_slice(), pkRm.as_slice() );
     assert_eq!(decryptor.decapsulator.as_bytes().as_slice(), &skRm);
+    let (enc_calc2, shared_secret2) = encryptor.encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    assert_eq!( &enc_calc2.as_ref(), &enc);
+    assert_eq!( shared_secret2, shared_secret);
     
     let encryptor2 = HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
     assert_eq!(encryptor2.encapsulator.as_bytes().as_slice(), &pkRm);
@@ -445,7 +275,7 @@ fn test_draft_ietf_hpke_pq_04_a_2 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("2a2bd95954150f73d200005e");
+    let _nonce = hex!("2a2bd95954150f73d200005e");
     let ct = hex!("4793c6f4dc5824a0039d8faf2d84d359fd6cf423eaeee578bbb7830068ba34b576
     a6e3f4ba03c5c2c62f2b869224a1c5acf96083cd13bdc3623a47bde544171a72aa
     684b12a562196785");
@@ -459,7 +289,7 @@ fn test_draft_ietf_hpke_pq_04_a_2 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("2a2bd95954150f73d200005f");
+    let _nonce = hex!("2a2bd95954150f73d200005f");
     let ct = hex!("83591508b3952f4dd43aee00760fce5c3c32a24ddc5594c1a9a1c45efbf6c69f41
     d2747c814c25377276ef9243ac4a89de05e746986dec2adab645bed9bff1e2cf4d
     433aed524b9d7ba2");
@@ -468,6 +298,28 @@ fn test_draft_ietf_hpke_pq_04_a_2 () {
     assert_eq!( ct2, ct);
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
+
+
+    // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("f05383cf57bc5c9d639f1eda2355ea5764f46b1a2c98fca15b99f6 1d7b5a6549");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("19e39f4f822df99b7488119e62385c99085c4a496e17a465124269 27d4fec854");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 }
 
 
@@ -476,7 +328,7 @@ fn test_draft_ietf_hpke_pq_04_a_2 () {
 // draft_ietf_hpke_pq_04
 // A.3. ML-KEM-1024, HKDF-SHA384, AES-256-GCM
 #[test]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_3 () {
     // A.3.1. Base Setup Information
@@ -484,7 +336,6 @@ fn test_draft_ietf_hpke_pq_04_a_3 () {
     // kem_id: 66
     // kdf_id: 2
     // aead_id: 2
-    use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem1024Sha384Aes256Gcm;
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
       3230353537323665");
     let ikmE = hex!("0152bf3799ed0803b9ac3e62695c51065fe2cd4a18ff655fb3efe7399c404e19");
@@ -592,7 +443,7 @@ fn test_draft_ietf_hpke_pq_04_a_3 () {
      190589c8a0fe95a3");
     let shared_secret = hex!("a9f5e349635145bb8a06c0b50b027bef523c5868dd3477a8a92cb5d
                eecc4113b");
-    let key = hex!("57928282570ac8e002ebc79908293d65faabdb3ef58149edb33083cc2f38a55b");
+    let _key = hex!("57928282570ac8e002ebc79908293d65faabdb3ef58149edb33083cc2f38a55b");
     let base_nonce = hex!("107259b6ac73abb151fb98a8");
     let exporter_secret = hex!("9d4faf56b5319ad7a66492576d15522e30d948ed11ed3543daf77
                  4c0466b698ce699de9671ef34f9e23a741b7efc5074");
@@ -601,6 +452,10 @@ fn test_draft_ietf_hpke_pq_04_a_3 () {
     
     assert_eq!(encryptor.encapsulator.as_bytes().as_slice(), pkRm.as_slice() );
     assert_eq!(decryptor.decapsulator.as_bytes().as_slice(), &skRm);
+
+    let (enc_calc2, shared_secret2) = encryptor.encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    assert_eq!( &enc_calc2.as_ref(), &enc);
+    assert_eq!( shared_secret2, shared_secret);
     
     let encryptor2 = HpkeIesMlKem1024Sha384Aes256Gcm::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
     assert_eq!(encryptor2.encapsulator.as_bytes().as_slice(), &pkRm);
@@ -617,7 +472,7 @@ fn test_draft_ietf_hpke_pq_04_a_3 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("107259b6ac73abb151fb98a8");
+    let _nonce = hex!("107259b6ac73abb151fb98a8");
     let ct = hex!("433d24cb45dba60451bfcdd3fcc9033a55cbcf128f6068a09cc617dee516d02bd1
     b15d8bb9f8acc788b29086566124414183c07dfe160d135213dc21b34e7320a19e
     54d979b2ba3f2d66");
@@ -631,7 +486,7 @@ fn test_draft_ietf_hpke_pq_04_a_3 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("107259b6ac73abb151fb98a9");
+    let _nonce = hex!("107259b6ac73abb151fb98a9");
     let ct = hex!("7256a951ca1a6c0ec0ee5e2a9b9289ddd576aed1e18adbf722258ce16cc7c07296
     6f9ce35084c1fdbcf0d9d5efa56506856f4fbd424225dd26307a97514766e837c6
     b93581a34df523e9");
@@ -640,24 +495,43 @@ fn test_draft_ietf_hpke_pq_04_a_3 () {
     assert_eq!( ct2, ct);
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
+
+       // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("ef5dd95b6aceae5c9b29be381b4f374852125b5e6cdabc985ab0f6 b808b27eb4");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("d0f3ad6f13a67b3ddfe63c205d33d9061b65fb99d91441cc145463 1d7b6a9914");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+
 }
+
 
 
 
 // draft_ietf_hpke_pq_04
 // A.4. MLKEM768-P256, HKDF-SHA256, AES-128-GCM
 #[test]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_4 () {
     // mode: 0
     // kem_id: 80
     // kdf_id: 1
     // aead_id: 1
-
-    use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768P256HkdfSha256Aes256Gcm};
-    use kems::draft_irtf_cfrg_concrete_hybrid_kems::ConcreteMlKem768P256;
-    
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
       3230353537323665");
     let ikmE = hex!("0ec0fee6a71457a9dac898a1c161bf1068e68de093f07754155bb8b8b378c17e
@@ -743,18 +617,22 @@ fn test_draft_ietf_hpke_pq_04_a_4 () {
      b31315f7fe53706ec9f62185cfa9c0fce11cbecd134b43acfd25e3959d914539a
      2501b3b9c8e9fec86b92a2b811fa9bc");
     let shared_secret = hex!("26c25e807a24354387a7385bc374953539001fcb7eb99eb8d63ec7fdb8441f46");
-    let key = hex!("cb79279f04960511e17368b7c83df0be");
+    let _key = hex!("cb79279f04960511e17368b7c83df0be");
     let base_nonce = hex!("47cdcf9aec36fdf3730d94ce");
     let exporter_secret = hex!("0443a178389fa1e426df5a129ef7431df2b7aca64d06c4a72a88118fccf7058f");
 
     //pub type HpkeIesQsfP256MlKem768Shake128Aes256GcmXX = hpke::HpkeIes::<hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemQsfP256MlKem768XX, hpke::hpke_types::sha2_kdfs::HpkeHkdfSha256, aes_gcm::Aes128Gcm>;
     //pub type HpkeIesQsfP256MlKem768Shake128Aes256GcmXX = hpke::HpkeIes::<ConcreteMlKem768P256, hpke::hpke_types::sha2_kdfs::HpkeHkdfSha256, aes_gcm::Aes128Gcm, hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdf2::<hpke::kem_id::QsfKemMlKem768P256Shake256Sha3256>>;
 
-    let (encryptor, decryptor) = HpkeIesMlKem768P256HkdfSha256Aes256Gcm::derive_pair_from_seed(&ikmR).unwrap();
+    let (encryptor, decryptor) = HpkeIesMlKem768P256HkdfSha256Aes128Gcm::derive_pair_from_seed(&ikmR).unwrap();
     assert_eq!(encryptor.encapsulator.as_bytes().as_slice(), &pkRm );
     assert_eq!(decryptor.decapsulator.as_seed_bytes().unwrap().as_slice(), &skRm);
     
-    let encryptor2 = HpkeIesMlKem768P256HkdfSha256Aes256Gcm::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
+    let (enc_calc2, shared_secret2) = encryptor.encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    assert_eq!( &enc_calc2.as_ref(), &enc);
+    assert_eq!( shared_secret2, shared_secret);
+
+    let encryptor2 = HpkeIesMlKem768P256HkdfSha256Aes128Gcm::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
     assert_eq!(encryptor2.encapsulator.as_bytes().as_slice(), &pkRm);
     
     let (enc_calc, mut send_cipher_ctx) = encryptor2.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
@@ -770,7 +648,7 @@ fn test_draft_ietf_hpke_pq_04_a_4 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
         30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("47cdcf9aec36fdf3730d94ce");
+    let _nonce = hex!("47cdcf9aec36fdf3730d94ce");
     let ct = hex!("766437e462397ec6d4b78c755a6f41cce023100641c04102fe935b1495cba6aa31
         323a97af05190a024bd0718581d48c71ff69d06523f6127ffb8f0cffde5b0bc098
         6fba65bfbbd6c7ff");
@@ -784,7 +662,7 @@ fn test_draft_ietf_hpke_pq_04_a_4 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("47cdcf9aec36fdf3730d94cf");
+    let _nonce = hex!("47cdcf9aec36fdf3730d94cf");
     let ct = hex!("30696da24a617458cbb0d8556d7fc64b98c726bc5144d941528af513795cb7c520
     b5a86d01b73c08dbb25b53b6b740f54808196834a6fc2e3202e17b14896a44adeb
     3bbf4f7d7343d3df");
@@ -793,6 +671,27 @@ fn test_draft_ietf_hpke_pq_04_a_4 () {
     assert_eq!( ct2, ct);
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
+
+    // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("b802e65aba5b55410741d61e2953e67596bdcb7c1914097f13d8ed 98e87e54d6");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("9a51c255f5dddc18a32357434443938129f2c1a488d997e44ebc3f e015b62820");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 
 }
 
@@ -810,8 +709,6 @@ fn test_draft_ietf_hpke_pq_04_a_5 () {
     // kem_id: 25722
     // kdf_id: 1
     // aead_id: 3
-
-    use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem768X25519Shake128ChaCha20Poly1305;
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
       3230353537323665");
     let ikmE = hex!("2a1c0a3745fe8a48fb62034d300f54dfe1974a5b2e169e580a8789cb1cf5fd19
@@ -941,6 +838,27 @@ fn test_draft_ietf_hpke_pq_04_a_5 () {
     assert_eq!( ct2, ct);
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
+
+    // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("5a78d37f40e078c17ef43fa40963f1ff7dcdee56e366da9099dc18 1c3eccaee5");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("19b8f5e1d7c02e44ad99d8332124b5c71fa9e81c5327ca485054f8 59e442bde5");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 }
 
 
@@ -956,8 +874,6 @@ fn test_draft_ietf_hpke_pq_04_a_6 () {
     // kem_id: 81
     // kdf_id: 2
     // aead_id: 2
-
-    use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem1024P384HkdfSha256Aes256Gcm;
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
       3230353537323665");
     let ikmE = hex!("bd1207854ec0963347d5218f900783d6ca0ff62c5e2181ca5a932e2d6d8d96cc
@@ -1120,6 +1036,27 @@ fn test_draft_ietf_hpke_pq_04_a_6 () {
     assert_eq!( ct2, ct);
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
+
+        // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("bc1c15452944a0d0db9195d24334d6862d68a3d7b18d35c756978c d649a6ac31");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("3e2fa8b88788690e13a139707c4fd764847bdd4d0d1902d64fa7fb c12c151ddc");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 }
 
 
@@ -1196,12 +1133,33 @@ fn test_draft_ietf_hpke_pq_04_a_7 () {
     assert_eq!( ct2, ct);
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
+
+            // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("e445830750c592c6ed3170d16fc1ef1298812285bb8a6cd06646b8 d5e854feb7");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("832ed1c00b4111f4d18526171750361c178a1fd819f545e9be73a4 51313852ff");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 }
 
 
 // A.8. DHKEM(P-384, HKDF-SHA384), Shake256, AES-256-GCM
 #[test]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_8 () {
     // A.8.1. Base Setup Information
@@ -1209,8 +1167,6 @@ fn test_draft_ietf_hpke_pq_04_a_8 () {
     // kem_id: 17
     // kdf_id: 17
     // aead_id: 2
-
-    use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesP384Shake256Aes256Gcm;
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
       3230353537323665");
     let ikmE = hex!("df490f3d80254f2485bc8abd4225c0834ab1982ce844a6b4a3390bbe9f348b0a
@@ -1228,7 +1184,7 @@ fn test_draft_ietf_hpke_pq_04_a_8 () {
      eb86b18d2ade59de94bab544f06222f49ab09d8d68debac3cb67ecce8bbcad9e");
     let shared_secret = hex!("8207f0a43f67bf912e327f0893e5a3b14314c38eaa8604229de4c03
                3c6589e3bbe28b513aac127e85b4830c63daf572f");
-    let key = hex!("3ac9e7e6bcbc65ae622fa26565263221985bdaf6277dcee0c883759ac297cc1a");
+    let _key = hex!("3ac9e7e6bcbc65ae622fa26565263221985bdaf6277dcee0c883759ac297cc1a");
     let base_nonce = hex!("3e5d5affb035edaa9a181e27");
     let exporter_secret = hex!("2cb29d9cd269212ebe4453fee3c3382f0ad11a3236a330ff91fd0
                  62fa2ea2f2ff02a8e3136ce38b2c053b11f05996965e33e636880
@@ -1238,6 +1194,10 @@ fn test_draft_ietf_hpke_pq_04_a_8 () {
     assert_eq!(encryptor.encapsulator.as_bytes().as_slice(), &pkRm );
     assert_eq!(decryptor.decapsulator.as_bytes().as_slice(), &skRm);
     
+    let (enc_calc2, shared_secret2) = encryptor.encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    assert_eq!( &enc_calc2.as_ref(), &enc);
+    assert_eq!( shared_secret2, shared_secret);
+
     let encryptor2 = HpkeIesP384Shake256Aes256Gcm::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
     assert_eq!(encryptor2.encapsulator.as_bytes().as_slice(), &pkRm);
 
@@ -1253,19 +1213,52 @@ fn test_draft_ietf_hpke_pq_04_a_8 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("3e5d5affb035edaa9a181e27");
+    let _nonce = hex!("3e5d5affb035edaa9a181e27");
     let ct = hex!("01b56453319ac535a38bc1a82ea4236f670f431cfd51e908e23e088eaa1b199e37
     c898661a288f24750f87d1b1d8e16b38fd3ee9159eda205336ccde14a2e6d38e99
     40441c5d86d5151d");
+
+    let ct2 = send_cipher_ctx.seal(Payload{msg:&pt, aad: &aad}).unwrap();
+    assert_eq!( ct2, ct);
+    let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
+    assert_eq! ( pt2, pt);
 
     //sequence number: 1
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("3e5d5affb035edaa9a181e26");
+    let _nonce = hex!("3e5d5affb035edaa9a181e26");
     let ct = hex!("956d4226ec8c7b3a8985c5b03363fc44f2dcd12ec7e6b8f46377e45eaba99256cb
     a0643129904673890b236ee192e99ff8ba104655dd4a52d106f3474106416ff33b
     864befec30bdb0c0");
+
+    let ct2 = send_cipher_ctx.seal(Payload{msg:&pt, aad: &aad}).unwrap();
+    assert_eq!( ct2, ct);
+    let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
+    assert_eq! ( pt2, pt);
+    
+
+
+    // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("874efb72c977692c78f6052d686b44c6d1592547988e969d9f09c6 46ac537b33");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("c573d286aa300d3e85f0fdde1df31dc35328b4b3a973f12b28f4df 7196444d3f");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 
 }
 
@@ -1273,7 +1266,7 @@ fn test_draft_ietf_hpke_pq_04_a_8 () {
 
 // A.9. DHKEM(X25519, HKDF-SHA256), TurboShake128, ChaCha20Poly1305
 #[test]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_9 () {
 
@@ -1282,10 +1275,7 @@ fn test_draft_ietf_hpke_pq_04_a_9 () {
     // kem_id: 32
     // kdf_id: 18
     // aead_id: 3
-
-    use hpke::hpke_types::{draft_ietf_hpke_pq::HpkeIesX25519TurboShake128ChaCha20Poly1305, x25519_kems::HpkeKemKdfX25519HkdfSha256};
-    use kdfs::Kdf;
-    use kems::DeriveKeyPairFromSeed;
+   
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
       3230353537323665");
     let ikmE = hex!("6a83220f8a55194c8d8621531a1af58a3e67a9d4ad6ffaa1f04ca52f5af6dc1a");
@@ -1295,7 +1285,7 @@ fn test_draft_ietf_hpke_pq_04_a_9 () {
     let enc = hex!("2ab42ac5e099dacf517d69fcd7e6df0c5a6a9e79e765f5c0c33e1437f9638e0f");
     let shared_secret = hex!("fcce4708329c0abad769b20a916009149486bc62798ab52210820b3
                353d86182");
-    let key = hex!("e12d5464fb07e0b41b917fbb8a28d02026c6233660e94046d64e9a9ab1d9f137");
+    let _key = hex!("e12d5464fb07e0b41b917fbb8a28d02026c6233660e94046d64e9a9ab1d9f137");
     let base_nonce = hex!("01de599541be16789d9431b5");
     let exporter_secret = hex!("737ce6aebdc271c9c348894ab8e6ba401c273a2822349e7b18cb6
                  0de5f601df4");
@@ -1327,7 +1317,7 @@ fn test_draft_ietf_hpke_pq_04_a_9 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("01de599541be16789d9431b5");
+    let _nonce = hex!("01de599541be16789d9431b5");
     let ct = hex!("5829095764d917cf36a75a6fb3801f3659b6b5910891efbf0754cb9f79eec14a18
     d171c9722a55d0781042fb2e2314071ef1befa5e6986d9eb485a1b68d4a0889543
     f0e337d4b2f86592");
@@ -1341,7 +1331,7 @@ fn test_draft_ietf_hpke_pq_04_a_9 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("01de599541be16789d9431b4");
+    let _nonce = hex!("01de599541be16789d9431b4");
     let ct = hex!("4b522c648ba01f8da28a4589b820cf93df6c48170fe99ffc6ecb9406d2bcba3aa5
     dfd01e411faf8bc5e8dde23d7dd00052df058a153bc3a64fd5dbe36f178fb9f8e1
     47daa0af1ff6cd9c");
@@ -1351,6 +1341,26 @@ fn test_draft_ietf_hpke_pq_04_a_9 () {
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
 
+        // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("6a370b998427c699725e43fe9f16a15994c465408d0c8429ba0145 9862690620");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("a8a0c9d3e4faf4dbcee304c8eb956990f2c4171ba696f5f7b822e4 41dfd05970");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 }
 
 
@@ -1358,7 +1368,7 @@ fn test_draft_ietf_hpke_pq_04_a_9 () {
 //   A.10. DHKEM(X448, HKDF-SHA512), TurboShake256, ChaCha20Poly1305
 #[test]
 //#[ignore = "waiting for single pass KDF to work.."]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_10 () {
     //A.10.1. Base Setup Information
@@ -1366,9 +1376,6 @@ fn test_draft_ietf_hpke_pq_04_a_10 () {
     // kem_id: 33
     // kdf_id: 19
     // aead_id: 3
-
-    use hpke::hpke_types::{draft_ietf_hpke_pq::HpkeIesX448TurboShake256ChaCha20Poly1305, x448_kems::HpkeKemKdfX448HkdfSha512};
-    use kems::DeriveKeyPairFromSeed;
     let info = hex!("3466363436353230366636653230363132303437373236353633363936313665
       3230353537323665");
     let ikmE = hex!("d967d4102fabf6108bae6474d9ffb0f8fd63e87721fc0e67eebd79e4d6e3d28a
@@ -1384,7 +1391,7 @@ fn test_draft_ietf_hpke_pq_04_a_10 () {
     let shared_secret = hex!("7835f33012c6964b7dbd420c296be335a4e2b854347495137fdc246
                6faea4694ebd09bcbdcdf5afa640591ab68a1901bf83beabeffd138
                45644022e6de31f672");
-    let key = hex!("5011ed9b69ad3a302a4862b32971c84c98c594b528008afd9978a93f4373244b");
+    let _key = hex!("5011ed9b69ad3a302a4862b32971c84c98c594b528008afd9978a93f4373244b");
     let base_nonce = hex!("5d2300c7f1815ead278bf6b6");
     let exporter_secret = hex!("1d04bc333f5a92e9924ab38d51087c088adb9cecd2df81092cda7
                  f14b27d1057debf405dc9fe7a99ff3b9bbafab2483455b5136c02
@@ -1418,7 +1425,7 @@ fn test_draft_ietf_hpke_pq_04_a_10 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("5d2300c7f1815ead278bf6b6");
+    let _nonce = hex!("5d2300c7f1815ead278bf6b6");
     let ct = hex!("04f8624dbc6e4c8661dc60b3e32f3b7202d31e4c10fb290eb866999e5f62f14df8
     00a071d5845d06b2af96ba0f03752c8392bd9a7bbe85ebc44c431e66c64dfcda91
     d1aa4004eee68325");
@@ -1432,7 +1439,7 @@ fn test_draft_ietf_hpke_pq_04_a_10 () {
     let pt = hex!("343236353631373537343739323036393733323037343732373537343638326332
     30373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("5d2300c7f1815ead278bf6b7");
+    let _nonce = hex!("5d2300c7f1815ead278bf6b7");
     let ct = hex!("e453d2b5121288bdc9dd5d9b41585b1e16b5d7bf3c2f7d7fcb5d07b0f6a54ca94a
     da06ba34267f2f0f624f01025eefd423a597e0c526d7e9d7547441f7bc4df03ef5
     52a1b045468a4b51");
@@ -1442,6 +1449,26 @@ fn test_draft_ietf_hpke_pq_04_a_10 () {
     let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
     assert_eq! ( pt2, pt);
 
+          // Exporter
+    let (enc3, encryptor3) = encryptor.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc3.as_slice(), enc);
+    
+    let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("ad4afad4f20d4d7f19b9aaffeebfa95f9d59fc167dbefe01c3a3e93b097d9a7a");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = encryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("934a365b300922e19e8358803bd259ac0300d87c28f0e3f265be92df1b0decc7");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 }
 
 
@@ -1449,30 +1476,19 @@ fn test_draft_ietf_hpke_pq_04_a_10 () {
 // A.11 MLKEM768-P256, Shake128, AES-256-GCM
 #[test]
 //#[ignore = "waiting for single pass KDF to work.."]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_11 () {
     //mode: 0
     //kem_id: 80
     //kdf_id: 16
     //aead_id: 2
-
-    use aead::{Payload, consts::U3};
-    use hpke::{hpke_kdf::Psk, hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768P256Shake128Aes256Gcm, HpkeIesMlKem768X25519Shake256ShaCha20Poly1305}};
-    use kems::draft_irtf_cfrg_concrete_hybrid_kems::{ConcreteMlKem768P256};
-    use p256::U32;
-    use kems::EncodeSeed;
-
-    use crate::common::{PredictableRng, PredictableRngForHybrid};
     let info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
     let ikmE = hex!("0244aa79fe4ea903b915a291c90fc30c43ae27794cbf4edb4c7285500273ee74
         83841d6dca12848d453853486ce317889443efbcfb44a0a91fbaecb22e25a2f8
         f61a81224a3ca716e57e85c59426773095e357d0abb11048863d900517eed2dd
         bec062a420d0e6deee4642f61c1a02ab709defcf4871b153fad642f5384d87e1");
     let ikmR = hex!("b40a79eb27e10e2c7b5811a36f1d4275810e17117b308fd85ab9c2b3dba7a961");
-    //let pkEm = hex!("81cbf4bd7eee97dd0b600252a1c964ea186846252abb340be47087cc78f3d87c");
-    let skEm = hex!("a2b43f5c67d0d560ee04de0122c765ea5165e328410844db97f74595761bbb81");
-    
     let pkRm = hex!("4f47aaa026b3efbc7b7df892893b5a6c1a2d72d63db3e49d672ca64a7192d837
         96c369369038cb319a34b76555441ca43025adfea869e113a81d9a59b4734866
         1a150b316b585151eb1556a98134ef33bf3fc49b14a56758a235bcb21cbefb61
@@ -1552,32 +1568,27 @@ fn test_draft_ietf_hpke_pq_04_a_11 () {
        c2e07c1144ce4962456ecb4e538498c0897cfa73c3f75ebf2ba5c23a903e2d3eb
        df981eee22480cbab5ae6e2e85b5e86");
     let shared_secret = hex!("4b87ac4d2e1d4b111ab7f69875a112d4734fe02938fa0d25976e002828a8bd3b");
-    let key = hex!("0b0298c6396745fb30f5e3df0e60c390c0a1a3e52090893871fc24adb02976e7");
+    let _key = hex!("0b0298c6396745fb30f5e3df0e60c390c0a1a3e52090893871fc24adb02976e7");
     let base_nonce = hex!("a5c6e6fe2671b3c4d7e6e8c7");
-    let exporter_secret = hex!("d5c597cb1c2a92d81aacb171635149b7f45a08a57b25407136cd2
-                   2be1ecd6bcb");
-
-    
+    let exporter_secret = hex!("d5c597cb1c2a92d81aacb171635149b7f45a08a57b25407136cd2 2be1ecd6bcb");
 
     let (pkrm3, skrm3) = HpkeIesMlKem768P256Shake128Aes256Gcm::derive_pair_from_seed(&ikmR).unwrap();
     assert_eq!(pkrm3.encapsulator.as_bytes().as_slice(), &pkRm );
     assert_eq!(skrm3.decapsulator.as_seed_bytes().unwrap().as_slice(), &skRm);
-    //assert_eq!(skrm3.decapsulator.as_bytes().as_slice(), &skRm );
 
+    let (enc_calc2, shared_secret2) = pkrm3.encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    assert_eq!( &enc_calc2.as_ref(), &enc);
+    assert_eq!( shared_secret2, shared_secret);
+    
     let he_encryptor = HpkeIesMlKem768P256Shake128Aes256Gcm::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
     assert_eq!(he_encryptor.encapsulator.as_bytes().as_slice(), &pkRm);
     
     
-    // let mut pred_rng = common::PredictableRngForHybrid::new2(&ikmE);
-    // let (enc_calc, mut send_cipher_ctx) = he_encryptor.setup_sender_cipher(&mut pred_rng, &info, None).unwrap();
     let (enc_calc, mut send_cipher_ctx) = he_encryptor.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
     assert_eq!( &enc_calc.as_ref(), &enc);
     assert_eq!( send_cipher_ctx.base_nonce, base_nonce);
 
-    //let he_decryptor = HpkeIesQsfX25519MlKem768Shake256ShaCha20Poly1305::decryptor_from_bytes(GenericArray::from_slice(&skRm));
-    let recv_exporter_ctx = skrm3.setup_receiver_cipher(&enc_calc, &info, None).unwrap();
-    
-    //assert! ( exporter_ctx == exporter_ctx2);
+    let mut recv_cipher_ctx = skrm3.setup_receiver_cipher(&enc_calc, &info, None).unwrap();
 
     // sequence number: 0
     let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
@@ -1591,33 +1602,30 @@ fn test_draft_ietf_hpke_pq_04_a_11 () {
     assert_eq! ( &send_cipher_ctx.base_nonce, &nonce);
     assert_eq!( ct2, ct);
     
-    
-    // let exporter_context = hex!("");
-    // let exported_value = hex!("dafd8beb94c5802535c22ff4c1af8946c98df2c417e187c6ccafe45335810b58");
-    // let send_exported_value = send_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", send_exported_value);
-    // assert! ( send_exported_value == exported_value);
-    // let recv_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", recv_exported_value);
-    // assert! ( recv_exported_value == exported_value);
+    let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
+    assert_eq!(pt2, pt);
 
-    // let exporter_context = hex!("00");
-    // let exported_value = hex!("7346bb0b56caf457bcc1aa63c1b97d9834644bdacac8f72dbbe3463e4e46b0dd");
-    // let calc_exported_value = send_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", calc_exported_value);
-    // assert! ( calc_exported_value == exported_value);
-    // let recv_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", recv_exported_value);
-    // assert! ( recv_exported_value == exported_value);
+    // Exporter
+    let (enc_calc2, send_export_ctx) = pkrm3.setup_sender_export_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( enc_calc2.as_slice(), enc);
+    let recv_export_ctx = skrm3.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(recv_export_ctx.exporter_secret, exporter_secret);
 
-    // let exporter_context = hex!("54657374436f6e74657874");
-    // let exported_value = hex!("84f3466bd5a03bde6444324e63d7560e7ac790da4e5bbab01e7c4d575728c34a");
-    // let calc_exported_value = send_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", calc_exported_value);
-    // assert! ( calc_exported_value == exported_value);
-    // let calc_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", calc_exported_value);
-    // assert! ( calc_exported_value == exported_value);
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("a2976da31f76e88396507981fd69b3ad575f8da4cab101d16dba51 fc31670f28");
+    let exported_value2 = recv_export_ctx.export::<U32>( &exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = send_export_ctx.export::<U32>( &exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("dbfadc2fa4f7c297a8107bd3a188af560a808b22c1f862663e6429 233ba9804d");
+    let exported_value2 = recv_export_ctx.export::<U32>( &exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+    let exported_value3 = send_export_ctx.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value3);
 }
 
 
@@ -1638,25 +1646,16 @@ fn test_draft_ietf_hpke_pq_04_a_11 () {
 // MLKEM768-X25519, Unknown KDF(Shake256), ChaCha20Poly1305
 #[test]
 //#[ignore = "waiting for single pass KDF to work.."]
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
 fn test_draft_ietf_hpke_pq_04_a_12 () {
     //mode: 0
     //kem_id: 25722
     //kdf_id: 17
     //aead_id: 3
-
-    use aead::Payload;
-    use hpke::{hpke_kdf::Psk, hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768X25519Shake256ShaCha20Poly1305}};
-    use p256::U32;
-
-    use crate::common::{PredictableRng, PredictableRngForHybrid};
     let info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
     let ikmE = hex!("67d925853f974ffeb36a867ba8b370c455c77fa386e0b667d6dea0fa0bcd9446a7a24daaf163ec2c0979a75f6b776a4e08ba8e89aa9fb4f604e95a9acddc4091");
     let ikmR = hex!("9b3988687f65935430cf740cc30c36cd480d3dbd24867815addad49ea0dc050d");
-    //let pkEm = hex!("81cbf4bd7eee97dd0b600252a1c964ea186846252abb340be47087cc78f3d87c");
-    let skEm = hex!("a2b43f5c67d0d560ee04de0122c765ea5165e328410844db97f74595761bbb81");
-    
     let pkRm = hex!("e6b1689ff28e68c7536cfc35a8d4b63bac50777871b8b82358ea75d8339817f0
         4e0e0b2fb25c9d0cecb3d1d8b23100982b867df40889d45bb27f5738d876c5c9
         48b2831c5d72587b2031391d957edf1167705c611cb9be9de54a56462a814662
@@ -1733,58 +1732,28 @@ fn test_draft_ietf_hpke_pq_04_a_12 () {
        49cba74fc0c911610e09b9885e97f5489c885f1570081debb1dbc4deb442fdd67
        33869d9e3e1fb43ba62bb7e2656e0b");
     let shared_secret = hex!("d9994083f7879bfd2333bab88dad36c0473eb67daeabb4f7d4e4dca56c63ddb4");
-    let key = hex!("fde2cb86e35b2adbc0730e09b87aff8e71703975b90512c9d5b9816bc26b2719");
+    let _key = hex!("fde2cb86e35b2adbc0730e09b87aff8e71703975b90512c9d5b9816bc26b2719");
     let base_nonce = hex!("cebe8333792f645648e6188e");
     let exporter_secret = hex!("ce13bbb4db2f720aa4fa0778afadacc0a7c03f2658548119c3584
                    998bc672c29e455a5fe5d82f8f12b974af8fab4dfffe048495ff0
                    d02851a8d6be4105e4d039");
 
-    // let recipient_public_key = x25519_dalek::PublicKey::from(pkRm);
-    // let sender_public_key = x25519_dalek::PublicKey::from(pkSm);
-    // let sender_secret_key = x25519_dalek::StaticSecret::from(skSm);
-    // let recipient_secret_key = x25519_dalek::StaticSecret::from(skRm);
-    // let he_encryptor = HpkeAuthIesX25519Sha256ExportOnly::auth_encryptor_from_keys(recipient_public_key, sender_secret_key );
-    // let he_decryptor = HpkeAuthIesX25519Sha256ExportOnly::auth_decryptor_from_keys(recipient_secret_key, sender_public_key);
-
-    let (pkrm3, skrm3) = HpkeIesMlKem768X25519Shake256ShaCha20Poly1305::derive_pair_from_seed(&ikmR).unwrap();
-    assert_eq!(pkrm3.encapsulator.as_bytes().as_slice(), &pkRm );
-    //assert_eq!(skrm3.decapsulator.as_bytes().as_slice(), &skRm );
-
-
-    let mut pred_rng = PredictableRngForHybrid::new2(&ikmE);
-    let encapsulator = XwingMlKem768X25519::from_bytes_encap(&GenericArray::from_slice(&pkRm));
-    let (c0_calc, k_calc) = encapsulator.encapsulate(&mut pred_rng).unwrap();
+    let (encryptor5, decryptor5) = HpkeIesMlKem768X25519Shake256Cha20Poly1305::derive_pair_from_seed(&ikmR).unwrap();
+    assert_eq!(encryptor5.encapsulator.as_bytes().as_slice(), &pkRm );
+    assert_eq!(decryptor5.decapsulator.as_seed_bytes(), Some(skRm.into()));
+    
+    let (c0_calc, k_calc) = encryptor5.encapsulator.encapsulate_deterministic(&ikmE).unwrap();
     assert_eq! ( c0_calc.as_ref(), enc );
     assert_eq! ( k_calc, shared_secret );
 
-    println! ( "shared_secret={:02X?}", shared_secret);
-
-    //Array::from(ikmE)
-    // let ikmE2 = Array::default();
-    // let (pkem3, skem3) = HpkeIesQsfX25519MlKem768Shake256ShaCha20Poly1305::derive_pair_from_seed(&ikmE2);
-    // assert_eq!(pkem3.encapsulator.as_bytes().as_slice(), &enc );
-    // assert_eq!(skem3.decapsulator.as_bytes().as_slice(), &skEm );
-
-
-
-
-
-    let he_encryptor = HpkeIesMlKem768X25519Shake256ShaCha20Poly1305::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
+    let he_encryptor = HpkeIesMlKem768X25519Shake256Cha20Poly1305::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
     
-    let mut pred_rng = common::PredictableRngForHybrid::new2(&ikmE);
-    let (enc_calc, mut send_cipher_ctx) = he_encryptor.setup_sender_cipher(&mut pred_rng, &info, None).unwrap();
+    let (enc_calc, mut send_cipher_ctx) = he_encryptor.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
     assert_eq!( &enc_calc.as_ref(), &enc);
     assert_eq!( send_cipher_ctx.base_nonce, base_nonce);
-
-    //let he_decryptor = HpkeIesQsfX25519MlKem768Shake256ShaCha20Poly1305::decryptor_from_bytes(GenericArray::from_slice(&skRm));
-    let recv_exporter_ctx = skrm3.setup_receiver_cipher(&enc_calc, &info, None).unwrap();
+    let mut recv_cipher_ctx = decryptor5.setup_receiver_cipher(&enc_calc, &info, None).unwrap();
+    assert_eq!( recv_cipher_ctx.base_nonce, base_nonce);
     
-    //assert! ( exporter_ctx == exporter_ctx2);
-
-    // let key:
-    // let base_nonce:
-    // let exporter_secret = hex!("695b1faa479c0e0518b6414c3b46e8ef5caea04c0a192246843765ae6a8a78e0");
-
     // sequence number: 0
     let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
@@ -1794,32 +1763,199 @@ fn test_draft_ietf_hpke_pq_04_a_12 () {
     let ct2 = send_cipher_ctx.seal(Payload{msg:&pt, aad: &aad}).unwrap();
     assert_eq! ( &send_cipher_ctx.base_nonce, &nonce);
     assert_eq!( ct2, ct);
-    
-    
-    // let exporter_context = hex!("");
-    // let exported_value = hex!("dafd8beb94c5802535c22ff4c1af8946c98df2c417e187c6ccafe45335810b58");
-    // let send_exported_value = send_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", send_exported_value);
-    // assert! ( send_exported_value == exported_value);
-    // let recv_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", recv_exported_value);
-    // assert! ( recv_exported_value == exported_value);
 
-    // let exporter_context = hex!("00");
-    // let exported_value = hex!("7346bb0b56caf457bcc1aa63c1b97d9834644bdacac8f72dbbe3463e4e46b0dd");
-    // let calc_exported_value = send_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", calc_exported_value);
-    // assert! ( calc_exported_value == exported_value);
-    // let recv_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", recv_exported_value);
-    // assert! ( recv_exported_value == exported_value);
+    let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
+    assert_eq!( pt2, pt);
+    
+    // Exporter
+    let decryptor3 = decryptor5.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
 
-    // let exporter_context = hex!("54657374436f6e74657874");
-    // let exported_value = hex!("84f3466bd5a03bde6444324e63d7560e7ac790da4e5bbab01e7c4d575728c34a");
-    // let calc_exported_value = send_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", calc_exported_value);
-    // assert! ( calc_exported_value == exported_value);
-    // let calc_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context);
-    // println! ( "calc_exported_value={:02X?}", calc_exported_value);
-    // assert! ( calc_exported_value == exported_value);
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("51aa31c5abe8b1785a8abe0ecc54870f4290839084259e12bd44ca c46e09dedb");
+    let exported_value2 = decryptor3.export::<U32>( &exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("f5514fb3f03ba111219e5df93e2212d1d612b11d23caa4ae4eb0d5 a5aaaa209b");
+    let exported_value2 = decryptor3.export::<U32>( &exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+}
+
+
+
+
+// draft_ietf_hpke_pq_04
+// A.13 ML-KEM-1024, Unknown KDF, AES-128-GCM
+#[test]
+//#[ignore = "waiting for single pass KDF to work.."]
+#[allow(non_snake_case)]
+#[cfg(all(feature="rustcrypto-sha2", feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
+fn test_draft_ietf_hpke_pq_04_a_13 () {
+    //mode: 0
+  // kem_id: 66
+  // kdf_id: 19
+  // aead_id: 1
+    let info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
+    let ikmE = hex!("ab765f59234788d2c785d7fc0cbb82873d73bfa6b8fc95cdefff6959a52bb9c1");
+    let ikmR = hex!("cfcd8c6d1798c45453ff275bd58e27c8222725354068fd85f00227521cfe275b
+        cd7525205c2b7809fc2eb5c201416a100769b4bb4a64490e821494dba747c87f");
+    let pkRm = hex!("bb2a7548e97f525ac760e5bdca8ac33cba130c045f12182fe2e3949c0546e544
+        a633173e1e39bd7a926078db70b1072fdbc4023138afc8f0240c80b5994492c5
+        348475e1cfa4a2ac77a6a2f7d740ee26add739a05958c8bd844f3f69313d76ba
+        acb00ba74b39b87b2938a5771acc71a8ca44c964c0d92a6c9bb4670f25a597d1
+        559b9125018b337e5a807e2a65f4d1b8bf821aa10008ae87c96e294a00311cea
+        b09d259abf56a48507037ea957254e63ae137345ee3a8d335191d14874f27b64
+        d3b87cbd19562381c21a74013a1b21a915b543690a282b3aedb8a187757e2770
+        3944cb91f0e240f915a91cf8590ac92b7876c6a0fc0577a59e8a4399c6b3a89b
+        e267b9a9ca69608e52067a5638b4953949adb2c713a95a7c372b4ea1b7791b12
+        7f23b917502ae9e26d5e568e910824afea6833bc48fc42c05273c9fc693b051a
+        69f50883545b275db909f1fa12936aa06448983b039db28c91f96969e538a8a2
+        1a7b0349532fcbb4c920ae459b09c37527285515f5eb38a3114f473b2b7a1097
+        d21615522232952bb4de87b625e92cad260aa1fba7b380cc14437073805769e8
+        bb8142c707a2a957194b0e7435d84506e305082b89a9161b20e00a537c56900b
+        bba8534c373d20b14b10b214e73ba7e698780890d301871ed44868339c28464a
+        f1d046502ca871e97d9286802bfb8207b27ff8150d8632b8b3420f5bb908a628
+        391c25519667c52846396b9860b0670412bb48d095aa85b21db19ccf63822760
+        b7377bab3e1f09a3a39b69f3e40b1088793738ce43a56dccc27efe483f27b322
+        cd753d0ac77780a770e06ac5369407f3eb3a517420bf549645901f26305f9c09
+        7dd13440383965c28c3304bc13840c3f1b28ab3b2a053ba3746c4cc4fdf41b83
+        d908b480cbafa8bb514b41db07b5b7990583dcbf9817592674c674351260646a
+        09b6778f2bb393e9824b087de700750c102dfed1cda2da75321097d9d4ad8f59
+        a56bd127938261b7f38a08664d7eeb1de1fb2981721b14b107fa989d23d5bd46
+        31763c10b1d615811b997d18fccc74a151482c2576274955b5370ba782fdd670
+        fb7a6581cba079310ac55118c34a40ce7b0827d61458b63e9951879b237d84f3
+        348fe5a44c3b654a5c4389cbb75fb5a1fce0c0b6861fc51883e0e01b7d118084
+        17cecaa91f1af6a1ad029b11706f19e7be4e04809620591d4a9d2ef52209241f
+        ff429bfef1c35ee56e57fbc733a893e3f66ae6b4cc73d33389971491f05f89f4
+        ae583c92eadb0af0372a18c466ba5c5565ca8f957682a150b2ec27266b209a47
+        6b8eddb00376d4c484957bfd0c67a1d81d69000e6b805aa68424990a0c63369e
+        6b03754c1b1d79b71c84d22993e335c6ab28ac974451e9676e04243419105d10
+        35217188c7481af33ab03fc67d7ab4c9a9f675e173205e2b21a9747f65a079ab
+        605962545b510b9c83b5c47ae41b026869e1a90eeee0b701cc5ddb482a5627c8
+        045b0e798aac032b692ba484c1909c042883b8f4227e187c2e226687059af88c
+        44480994e15c48dd15603304716966a0f7f2373ca9b302a83f42223c12ec31e5
+        bc95ee738f9210a1571c7fc5db1be783c0319b9a7850ab849538384218f8d41c
+        82959a0cecb3084b8567437c491959f879a153c1aca0d01a324b95fdc1852a1b
+        47e9414f52f4470b8bb41729b1fcb9011e3408fe83cdd4346ee62a31c5404dd1
+        4724ab61b817eb081e58ac76ca2386b92a08b959c285a8d1333a431c7b82569d
+        7f1c6705e3b84de9a0555712ef33521c2773a651c079ab9071170a0d15ab8d4c
+        59646b0b5c8ac78a6b35398356b8baa9cccc7735b25a91878f3cabcac1f2651e
+        a860d49b4cbf63aac3d57c2f268d1d17542114b7b97abc6c5b42f6f4a907fb93
+        27431e93790f1ee696ff4186179450e2662b0e2047f4c389d505067ea7481d5b
+        535b96825df52e22127ce77c54dc5892669c98e2aaba5e46a9da9b9a6690cda7
+        e3542806707ca16c2c40954b0ccf59943ceaa628ce526d77619bd1111d159300
+        e6d3b6ba88a76a2797e1b8c5db6b161cdb3db0f6a84da1a18042b75ee7c56128
+        b6ffc4adbda53143f09d210c5a30c5677ed349f8b3ac19c1bc00b6594e345137
+        e8236aa4926b719f7a8ac9ea463d4c9bcd695754c40c2616753c0327b3139828
+        296da004486635a36a194fc5622c428cb057851cf89ced5e2c7533328708d0f5");
+    let skRm = hex!("545f8a47869bbe8231bfa14de61aaa71aaafde79ab6281e3f42e0a28a8868f8f
+        bd405f148b0137bbc46603919e5ac1e768d1e6bb9ac4a9abc05edc5b5a5be726");
+    
+    let enc = hex!("0cb6a215dab3c53cacb28f943fb791897083a76ac9e7b4d4a0a561ab3bec02669
+       abdecb44c4be773610dcabbc5de3381acbecd79ab6542e92132a4a7960c6cf9be
+       1140d59ebbce2d1fd7d662eaafb69b09afb392dd81e9c7f4aa85be187b202ddd0
+       5d2dfd91d98b9229ea1074038ae53ac25fd0bd0ce494985bc2e9ca4e25c98e8de
+       5e1773351d4150404f946e6f6217a98ae895741755b527663a958cdf27fa7c9dc
+       bf0dc877eaeecbe417f07bb644825fc3473ae6b6d8ea68513078f75b35a3c5c62
+       90035b8825d9b8b1dfc443cd85e207882e1106f38532d9dea044c982002f4ea57
+       38b242d4ed0096e6f7f92859c03b39223b98125e66975a6145efd49e56e3bd54e
+       f3cda59a26a50841826b6140653fbfc9a0fb6dba2a0c8fd3211ef98643a3b5712
+       13be54a03763c73bcf5582d83df836e5d9276adc02b15dfd2f920b889e3fd07a2
+       93b2eb4af3999028ace4168f4ac51cf9d68aab0f9566d2a2a05e128fc9d06e55d
+       c7b3506a99cd56ba359f3751656d543b701d0c3cb70c85fdd4f39f2505a911acd
+       48866c8016491472f468f646df5202321d82f9b950b24f8fa8755830d73c37d84
+       d6bdf820498052792d3a91592a29aa0633556c7a8c9e7207beb07ed396d7af4a8
+       26ed88058f868780fe67d137893840b706545a28ffd596c0eb07c04c401297c41
+       0f500f589b663133d22904a4497a0bd1284e9a7a781ea2a76ad63c131e2c60eeb
+       b0c544a7d9eb904399beaf75538eb884e4321d91ecdd543c3bd922e5a41c8e444
+       bd037591d3c02d84940f8e67c2828bea775bf517864f8413404db8d157ae86ad1
+       96f919d048408c73721c55430129a00229e19e3cbaabdf7b001c70ec1064a5b5c
+       e434c149132c6bc4cf48ba740a98cc8e4695d5d223e32348a8bd24e0555c4de1a
+       888b81c7915276eb9ee3c522d9ac92b357ff83e31ac35de66d308fc0a5cb3b7fe
+       4683757ca8586c0bd56b7be4989936391657bc74705c1501084965ed9298b2fac
+       b7dea91a90f195cd15151788bed3b7bd39b606f95274f930169a5a592e134f5c3
+       60d54325ef34e925271561f280cd70fe2175b130d88d3bd1bb18db1c3483a8c5b
+       5ff14672688278f4b46ab4a81ffc829294af5bed297f613c5bddf5165d38806d3
+       1a27940acfb2f0ae5e856f1faa850fd3d384d711993be92f9e478f3c82fb7b68e
+       2eddc51608bb0fbe8b1d71015c9730da8a0b45c29ff7d28b19958bcf3a1dae0b2
+       90fe144445f211f11645784240210ce6b40333648118631c347ec483ec072969c
+       6a2cecae1c298b216f988e002810d70e37f7a8044cb1298f1547c92731985e1f3
+       b5445c8ba57d3a96cede572bc3e754cd7c6f47ad416b444426664046a4b5743e6
+       b15ad37c9d042b388b73970813bb694a015f511fd6f9063ec3726a28060f8462c
+       7f1baed77e22fb2a4c2a2a66f08f8925d32f3fc8096cc27ae91bbfddcd63c27c7
+       1a4261a7507fa912c9dd466d8e1e09662789076f3d1dbb626a4d6a72538f1208b
+       9bacc8b20f74e7f8862e7c7481ddda4c387821301959679a7bca986c72ed32ca9
+       342f9c726877d94bcace8096e7d6815476c4b624665ba5151d347a6de5544c764
+       757191ddd3b0c8c00db5c9fd3fdb07800b6ea6afd3ac13f375bd2c662408224af
+       a4efeda238f2ee48c73365aa8d934783d9a55a9cdd247194d1f812e67c05aab76
+       0493328f6ea85419963b10016ee2c461e6b14031f35f075a0bb573ff349435c31
+       7940a4e4ab098fdd94f74eccd558a924bcde3a8c5c22d025f61fc4d85f4515e51
+       21c74bf5ffa5c7b20dbb4252b5c2a5e1cc2b99c37e735f9026d93a6e9873bec98
+       0b4ab14c1e549b39dd1d3d3a7092aa87bbe4f314e29ac982f4e5d20f8a0b6d2d9
+       a724aa90bc1d606366353ae643d5a1a556cb8cfb6f0897f88c5f8741b87dc9f6e
+       a5ed6ef9a25a53875cf9ae9a932ccc3d352b25761a1d21ccc5b24b4a7182e43d5
+       50d0b4167072f7b2d67fec4dc01ba92d5070b6f0c2182a9c904b54a3ac4656f7d
+       81e6966ee59abd31e2640abefb946cad125266bdd441e9ab856a568c602c8553c
+       ef6678147b409c6dec27d91bd3c68ec3d22f94e482fe2f4decc88ca45fda1edef
+       4da862e6914ff26f6f96faf5b1b5945c2fcc37c965c0ceb763c7f4f70a89e7f73
+       254075516e4e34eb24af4a10b2f22d515e7a4a9965cfd2ea02b4d4a436f61f97c
+       948472e5dbb33b00");
+    let shared_secret = hex!("6d3d3174abc633f10cc9ee967988926586d6174a53d4f83c4d1c1a1
+                 add2ffb04");
+    let _key = hex!("572706a57022ab98af4f4ce1b8de4242");
+    let base_nonce = hex!("9bc56885fe63e193ff62b41c");
+    let exporter_secret = hex!("bf9a89c68d9d7a6116e833ee5e95ef8ad25d586b5f4faf304604f
+                   27fe174c3cd6f87ba8d50e4791ea1c2a8f1780a0a01b3075db65b
+                   28d1cfe7f0dd87a806044a");
+
+    let (pkrm3, skrm3) = HpkeIesMlKem1024TurboShake256Aes128Gcm::derive_pair_from_seed(&ikmR).unwrap();
+    assert_eq!(pkrm3.encapsulator.as_bytes().as_slice(), &pkRm );
+    assert_eq!(skrm3.decapsulator.as_bytes(), skRm.into());
+    
+    let encapsulator = HpkeKemMlKem1024::from_bytes_encap(&GenericArray::from_slice(&pkRm));
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    assert_eq! ( c0_calc.as_ref(), enc );
+    assert_eq! ( k_calc, shared_secret );
+
+    let he_encryptor = HpkeIesMlKem1024TurboShake256Aes128Gcm::encryptor_from_bytes(GenericArray::from_slice(&pkRm));
+    
+    let (enc_calc, mut send_cipher_ctx) = he_encryptor.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
+    assert_eq!( &enc_calc.as_ref(), &enc);
+    assert_eq!( send_cipher_ctx.base_nonce, base_nonce);
+    let mut recv_cipher_ctx = skrm3.setup_receiver_cipher(&enc_calc, &info, None).unwrap();
+    assert_eq!( recv_cipher_ctx.base_nonce, base_nonce);
+    
+    // encryption sequence number: 0
+    let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
+    let aad = hex!("436f756e742d30");
+    let nonce = hex!("9bc56885fe63e193ff62b41c");
+    let ct = hex!("3f491e91c4f0b61d710c51f5a4cbf06ec2aa1171894418b660345b22ccdd7b8be4
+      314e90caadc4554eb3d0ccef61c231f98547d8a16bca8f8f1556d619a85fb089ba
+      c81a24b17203421e");
+
+    let ct2 = send_cipher_ctx.seal(Payload{msg:&pt, aad: &aad}).unwrap();
+    assert_eq! ( &send_cipher_ctx.base_nonce, &nonce);
+    assert_eq!( ct2, ct);
+
+    let pt2 = recv_cipher_ctx.open(Payload{msg:&ct, aad: &aad}).unwrap();
+    assert_eq!( pt2, pt);
+
+    // Exporter
+    let decryptor3 = skrm3.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+
+    // exporter sequence number: 0
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("3e7d4943487b9b2a6e56040a271a5fe79b73791f49e9bd18df78ba 06a3da7dcf");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
+
+    // // sequence number: 1
+    let exporter_context = hex!("70736575646f72616e646f6d31");
+    let exported_value = hex!("ce8934e777b1e850be6a4490a159121a10b1f0b469f817ffe49651 9b2d9b4a22");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value, exported_value2);
 }

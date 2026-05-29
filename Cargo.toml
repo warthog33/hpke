@@ -6,18 +6,18 @@ edition = "2024"
 [features]
 all = ["rustcrypto-sha2", "rustcrypto-chacha20poly1305", "rustcrypto-x448", "rustcrypto-aes", "rustcrypto-x25519", "rustcrypto-cbc", "rustcrypto-ml-kem", "rustcrypto-sha3", "rustcrypto-hmac", "rustcrypto-p256", "rustcrypto-p384", "rustcrypto-p521", "rustcrypto-k256" ]
 
-rustcrypto-aes = ["dep:aes-gcm", "dep:aes", "kdfs/rustcrypto-aes"]
-rustcrypto-cbc = ["dep:cbc"]
+rustcrypto-aes  = ["dep:aes-gcm", "dep:aes", "kdfs/rustcrypto-aes"]
+rustcrypto-cbc  = ["dep:cbc"]
 rustcrypto-sha2 = ["dep:sha2", "kems/rustcrypto-sha2", "kdfs/rustcrypto-sha2"]
 rustcrypto-sha3 = ["dep:sha3", "dep:shake", "dep:turboshake", "kems/rustcrypto-sha3"]
 rustcrypto-p256 = ["dep:p256", "kems/rustcrypto-p256"]
 rustcrypto-p384 = ["dep:p384", "kems/rustcrypto-p384"]
 rustcrypto-p521 = ["dep:p521", "kems/rustcrypto-p521"]
 rustcrypto-k256 = ["dep:k256", "kems/rustcrypto-k256"]
-rustcrypto-x25519 = [ "dep:x25519-dalek", "kems/rustcrypto-x25519" ]
-rustcrypto-x448 = ["dep:x448", "kems/rustcrypto-x448"]
-rustcrypto-ml-kem = ["dep:ml-kem", "kems/rustcrypto-ml-kem"]
 rustcrypto-hmac = ["dep:hmac", "kems/rustcrypto-hmac"]
+rustcrypto-x448 = ["dep:x448", "kems/rustcrypto-x448"]
+rustcrypto-x25519 = [ "dep:x25519-dalek", "kems/rustcrypto-x25519" ]
+rustcrypto-ml-kem = ["dep:ml-kem", "kems/rustcrypto-ml-kem"]
 rustcrypto-chacha20poly1305 = ["dep:chacha20poly1305"]
 
 [dependencies]
@@ -27,28 +27,30 @@ aead = "0.6.0-rc.0"
 digest = { version="0.11.3", features = ["mac"]}
 elliptic-curve = { version = "0.14.0-rc.13", features = ["ecdh"] }
 
+aes-kw = { version = "0.3.0"}
+
+aes  =  { version = "0.9.0", optional = true }
+aes-gcm = { version = "0.11.0-rc.0", optional = true }
+cbc  = { version = "0.2.1", optional = true }
 p256 = { version = "0.14.0-rc.0", optional = true}
 p384 = { version = "0.14.0-rc.0", optional = true }
 p521 = { version = "0.14.0-rc.0", optional = true}
 k256 = { version = "0.14.0-rc.0", optional = true}
-
-x25519-dalek = { version = "2.0.0", optional=true, features = ["static_secrets"] }
 x448 = { version = "0.14.0-pre.0", optional = true}
-
-crypto_secretbox = { version = "0.1.1"}
-aes  =  { version = "0.9.0", optional = true }
-aes-gcm = { version = "0.11.0-rc.0", optional = true }
-cbc  = { version = "0.2.1", optional = true }
+x25519-dalek = { version = "2.0.0", optional=true, features = ["static_secrets"] }
+sha2 = { version = "0.11.0", optional = true }
+sha3 = { version = "0.12.0", optional = true }
+hmac = { version = "0.13.0", optional = true }
+shake = { version = "0.1.0", optional = true }
+turboshake = { version = "0.7.1", optional = true }
 chacha20poly1305 = { version = "0.11.0-rc.0", optional = true }
+crypto_secretbox = { version = "0.1.1"}
+
+
 #ml-kem = { version = "0.3.2", optional = true }
 ml-kem = { version = "0.2.1", optional = true}
 #ml-kem = { version = "0.3.0-rc.0", optional = true, features=["hazmat"] }
-sha2 = { version = "0.11.0", optional = true }
-sha3 = { version = "0.12.0", optional = true }
-shake = { version = "0.1.0", optional = true }
-turboshake = { version = "0.7.1", optional = true }
-hmac = { version = "0.13.0", optional = true }
-aes-kw = { version = "0.3.0"}
+
 
 
 [dev-dependencies]

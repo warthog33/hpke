@@ -215,6 +215,8 @@ where A: Aead + KeyInit,
     {
         //let (cipher_key, base_nonce, _) = K::derive::<A::KeySize, A::NonceSize, K::LE>(kdf, is_auth, shared_secret, info, psk)?;
         let (cipher_key, base_nonce, _) = kdf.derive::<A::KeySize, A::NonceSize, K::LE>(is_auth, shared_secret, info, psk)?;
+        //dbg!(is_auth, shared_secret, info, &cipher_key, &base_nonce);
+
         Ok(HpkeCipherContext{ cipher: A::new(&cipher_key), base_nonce, sequence_number: 0})
     }
 
@@ -251,7 +253,8 @@ where A: Aead + KeyInit,
 pub struct HpkeExportContext<K: HpkeKdf> 
 {
     pub exporter_secret: Array::<u8, K::LE>,
-    phantom: PhantomData<K>,
+    //phantom: PhantomData<K>,
+    kdf: K,
 }
 
 ///
@@ -259,7 +262,7 @@ impl<K: HpkeKdf> HpkeExportContext<K>
 {
     /// Create a new HpkeExportContext from a shared secret, info and psk
     //fn new<LK: ArraySize, LN: ArraySize>(kdf: &<K as HpkeKdf>::K, is_auth: bool, shared_secret: &[u8], info: &[u8], psk: Option<Psk> ) -> Result<Self,()>
-    fn new<LK: ArraySize, LN: ArraySize>(kdf: &K, is_auth: bool, shared_secret: &[u8], info: &[u8], psk: Option<Psk> ) -> Result<Self,()>
+    fn new<LK: ArraySize, LN: ArraySize>(kdf: K, is_auth: bool, shared_secret: &[u8], info: &[u8], psk: Option<Psk> ) -> Result<Self,()>
     where LN: Add<LK>,
         LN: Add<K::LE>,
         LK: Add<<LN as Add<K::LE>>::Output>, <LK as Add<<LN as Add<K::LE>>::Output>>::Output: Sub<LK>, 
@@ -271,13 +274,14 @@ impl<K: HpkeKdf> HpkeExportContext<K>
     {
         //let (_, _, exporter_secret) = K::derive::<LK,LN,K::LE>(&kdf, is_auth, shared_secret, info, psk)?;
         let (_, _, exporter_secret) = kdf.derive::<LK,LN,K::LE>(is_auth, shared_secret, info, psk)?;
-        Ok(HpkeExportContext{exporter_secret, phantom: PhantomData})
+        //Ok(HpkeExportContext{exporter_secret, phantom: PhantomData})
+        Ok(HpkeExportContext{exporter_secret, kdf})
     }
 
     /// Derive an export value from the previously calculated export secret and the provided exporter_context
-    pub fn export<'a : 'b,'b,L2: ArraySize>(&'a self, kdf: &K, exporter_context: &[u8] ) -> Result<Array<u8, L2>, ()>
+    pub fn export<'a : 'b,'b,L2: ArraySize>(&'a self, exporter_context: &[u8] ) -> Result<Array<u8, L2>, ()>
     {
-        K::derive_exported_value::<L2>(&kdf, &self.exporter_secret, exporter_context)
+        K::derive_exported_value::<L2>(&self.kdf, &self.exporter_secret, exporter_context)
     }
 }
 
@@ -457,7 +461,7 @@ where C: Capsulator + KemId,
     {
         let shared_secret = self.decapsulator.decapsulate(encapsulated_key).map_err(|_|Error::KemError)?;
         let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
-        HpkeExportContext::new::<A::KeySize, A::NonceSize>( &kdf.into(), IS_AUTH,shared_secret.as_slice(), info, psk).map_err(|_|Error::KemError)
+        HpkeExportContext::new::<A::KeySize, A::NonceSize>( kdf.into(), IS_AUTH,shared_secret.as_slice(), info, psk).map_err(|_|Error::KemError)
     }
     
     ///
@@ -489,8 +493,8 @@ where C: Capsulator + KemId,
     where <K as HpkeKdf>::K: KdfLabelled
     {
         let context = self.setup_receiver_export(encapped_key, info, psk)?;
-        let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
-        context.export::<L>(&kdf.into(), exporter_context).map_err(|_|Error::KemError)
+        //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
+        context.export::<L>(exporter_context).map_err(|_|Error::KemError)
     }
 }
 
@@ -575,7 +579,25 @@ where A: Aead + KeyInit + AeadId,
     {
         let (encapped_key, shared_secret ) = self.encapsulator.encapsulate(csprng).map_err(|_|Error::KemError)?;
         let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
-        Ok((encapped_key, HpkeExportContext::new::<A::KeySize, A::NonceSize>(&kdf.into(), IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
+        Ok((encapped_key, HpkeExportContext::new::<A::KeySize, A::NonceSize>(kdf.into(), IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
+    }
+
+    ///
+    /// Implements the first part of HPKE which uses a key encapsulation kem and kdf to create an encapsulated
+    /// key and derived shared key
+    /// 
+    pub fn setup_sender_export_deterministic(
+        &self,
+        randomness: &[u8],
+        info: &[u8],
+        psk: Option<Psk>,
+    ) -> Result<(Ciphertext<C>, HpkeExportContext<K>), Error> 
+    where C::Encapsulator: EncapsulateDeterministic2<GenericArray<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
+        <K as HpkeKdf>::K: KdfLabelled
+    {
+        let (encapped_key, shared_secret ) = self.encapsulator.encapsulate_deterministic(randomness).map_err(|_|Error::KemError)?;
+        let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
+        Ok((encapped_key, HpkeExportContext::new::<A::KeySize, A::NonceSize>(kdf.into(), IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
     }
 
     ///
@@ -595,6 +617,24 @@ where A: Aead + KeyInit + AeadId,
         Ok((encapped_key, cipher_context.seal(pt)?))
     }
 
+    ///
+    /// Function to encrypt (seal) a plaintext (pt) using a recipient public key
+    /// 
+    //pub fn single_shot_seal <'msg, 'aad, R: CryptoRng + RngCore> (
+    pub fn single_shot_seal_deterministic <'msg, 'aad> (
+        &self,
+        randomness: &[u8],
+        pt: impl Into<Payload<'msg, 'aad>>,
+        info: &[u8],
+        psk: Option<Psk>,
+    ) -> Result<(Ciphertext<C>, Vec<u8>), Error> 
+    where C::Encapsulator: EncapsulateDeterministic2<GenericArray<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
+        <K as HpkeKdf>::K: KdfLabelled
+    {
+        let (encapped_key,mut cipher_context) = self.setup_sender_cipher_deterministic ( randomness, info, psk).map_err(|_|Error::KemError)?;
+        Ok((encapped_key, cipher_context.seal(pt)?))
+    }
+
     /// 
     /// Function to create an encapsulated key and associated shared export secret
     /// 
@@ -608,8 +648,26 @@ where A: Aead + KeyInit + AeadId,
     where <K as HpkeKdf>::K: KdfLabelled
     {
         let (encapped_key, context) = self.setup_sender_export(csprng, info, psk)?;
-        let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
-        Ok((encapped_key, context.export::<L>(&kdf.into(), export_context).map_err(|_|Error::KdfError)?))
+        //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
+        Ok((encapped_key, context.export::<L>(export_context).map_err(|_|Error::KdfError)?))
+    }
+
+    /// 
+    /// Function to create an encapsulated key and associated shared export secret
+    /// 
+    pub fn single_shot_sender_export_deterministic<'a, L:ArraySize> (
+        &self,
+        randomness: &[u8],
+        export_context: &[u8],
+        info: &[u8],
+        psk: Option<Psk>,
+    ) -> Result<(Ciphertext<C>, Array<u8,L>), Error> 
+    where C::Encapsulator: EncapsulateDeterministic2<GenericArray<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
+        <K as HpkeKdf>::K: KdfLabelled
+    {
+        let (encapped_key, context) = self.setup_sender_export_deterministic(randomness, info, psk)?;
+        //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
+        Ok((encapped_key, context.export::<L>(export_context).map_err(|_|Error::KdfError)?))
     }
 }
 

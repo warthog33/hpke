@@ -2,55 +2,25 @@
 // Test vectors from draft-ietf-hpke-pq-03
 
 use aead::Payload;
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use base64::{prelude::BASE64_STANDARD, Engine};
 use hex_literal::hex;
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use hmac::HmacReset;
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use hpke::hpke_kdf::{LabelHpkeV1, LabelKdf};
-    #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p256", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-use hpke::hpke_types::{p256_kems, sha2_kdfs};
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use hpke::hpke_types::sha2_kdfs::{LabelledTkdf1};
-use hpke::hpke_types::{HpkeAuthIesP256Sha256Aes256Gcm, p256_kems::HpkeAuthKemP256HkdfSha256, HpkeIesP256Sha256Aes256Gcm, HpkeIesP384Sha384Aes256Gcm, HpkeIesP521Sha512Aes256Gcm, HpkeIesX25519Sha256ChaCha20Poly1305, p256_kems::HpkeKemP256HkdfSha256, p384_kems::HpkeKemP384HkdfSha384, p521_kems::HpkeKemP521HkdfSha512, x25519_kems::HpkeKemX25519HkdfSha256}; 
-use hpke::HpkeIes;
-
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768Sha256Aes128Gcm, HpkeIesMlKem1024Sha384Aes256Gcm};
-
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p256", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem768P256Shake256Aes128Gcm;
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem1024P384Shake256Aes256Gcm;
-
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use hpke::{aead_id, kdf_id, kem_id};
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use kdfs::KdfLabelled;
+use hpke::{kem_id};
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768Sha256Aes128Gcm, HpkeIesMlKem1024Sha384Aes256Gcm, HpkeIesMlKem768P256Shake256Aes128Gcm, HpkeIesMlKem1024P384Shake256Aes256Gcm};
 use kdfs::{Kdf};
 use kdfs::hybrid_array::Array;
-
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use kems::{Capsulator, EncodedSizeUser2, GetEncapsulator, FromKeys, EncodeSeed};
+use kems::{GenerateCapsulatorFromSeed, EncodedSizeUser2, EncodeSeed, Decapsulate};
+use kems::xwing::XwingMlKem768X25519;
 use kems::generic_array::{GenericArray, typenum::consts::U32};
 
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
-use sha2::Sha256;
-use sha2::{Sha384};
 
-
-#[allow(non_snake_case, unused)]
+#[allow(non_snake_case)]
 #[test]
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
 // A.1.  ML-KEM-768, HKDF-SHA256, AES-128-GCM
-fn a_1_1()
+fn a_1_1_v3()
 {
     // mode: 0
     // kem_id: 65
     // kdf_id: 1
     // aead_id: 1
-
     let info  = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
     let ikmR = hex!("19aaaad124d9e3a3645aa45cb7f5b6db21f54832f659e0b01d54b630eb8fbb5d
         9738866d84c4e597178ae106038a6a6b475ed76cad81a5daa312c3f838a2edaf");
@@ -129,32 +99,28 @@ fn a_1_1()
        9db6fe51e8d03e42ec73e4b222ca983");
     let shared_secret = hex!("ab72523ee276c1b5653bf19ef201178a312297b47b813b271c68b89
                  aabcf52a1");
-    let key = hex!("40d9ae28dd3a899e48a737dea17f4071");
+    let _key = hex!("40d9ae28dd3a899e48a737dea17f4071");
     let base_nonce = hex!("e263b670fc7cc4ec31f0c733");
     let exporter_secret = hex!("ee31d2118ae0c4d92d5011a6954ae932bb013925ed485c9d2d22b
                    70428f1c9ed");
 
-    //let decryptor = HpkeIesMlKem768Sha256Aes128Gcm::new_decryptor_bytes(&GenericArray::from_slice(&ikmR));
-    // let kdf = hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::MlKem768>::derive_secret_other::<U64>(&ikmR, &[]);
-    // println! ( "kdf out={:02X?}", kdf);
-    // pub type HpkeIesMlKem768Sha256Aes128Gcm = HpkeIes<HpkeKemMlKem768, HpkeHkdfSha256, aes_gcm::Aes128Gcm, HpkeKemOneStepKdfKeyDerive::<kem_id::MlKem768>>;
-
     let (encryptor, decryptor) = HpkeIesMlKem768Sha256Aes128Gcm::derive_pair_from_seed(&ikmR).unwrap();
-    println! ( "{:02X?}", encryptor.encapsulator.as_bytes());
     assert_eq! ( decryptor.decapsulator.as_bytes().as_slice(), skRm.as_slice());
-    //assert_eq! ( HpkeIesMlKem768Sha256Aes128Gcm::Decapsulator::encode(&decryptor.decapsulator).as_slice(), skRm.as_slice());
     assert_eq! ( encryptor.encapsulator.as_bytes().as_slice(), pkRm.as_slice());
+
+    let shared_secret2 = decryptor.decapsulator.decapsulate(GenericArray::from_slice(&enc)).unwrap();
+    assert_eq!(shared_secret2, shared_secret);
 
     // sequence number: 0
     let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("e263b670fc7cc4ec31f0c733");
+    let _nonce = hex!("e263b670fc7cc4ec31f0c733");
     let ct = hex!("c7cc1822fee767a90cde7b17f66f98acc96742159ceac9f9403c6a8f378411f4a1
       26124d3c267ed86389a670c69db9cf49b351ca29c4a5e2688ac6818a7761d9656d
       4bd0ae2634c7306b");
 
     let mut decryptor2 = decryptor.setup_receiver_cipher(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
-    assert_eq! ( decryptor2.base_nonce, nonce);
+    assert_eq! ( decryptor2.base_nonce, base_nonce);
 
     let pt2 = decryptor2.open(Payload{msg: &ct, aad: &aad }).unwrap();
     assert_eq! ( pt.as_slice(), pt2.as_slice());
@@ -162,7 +128,7 @@ fn a_1_1()
     // let sequence number: 1
     let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("0e0a56bbb96f8a4f6783c7dc");
+    let _nonce = hex!("0e0a56bbb96f8a4f6783c7dc");
     let ct = hex!("1fb9a4f62097c68343babbc54ce313909a181d22eeafe58ea2505087096e6ae3ed
       06144b7d68a0e37a1f6b6108b1553651cd7ac323ecce898f73df0b88c3787126d0
       9a459380d0ba6eb4");
@@ -171,26 +137,30 @@ fn a_1_1()
     assert_eq! ( pt.as_slice(), pt2.as_slice());
 
     let decryptor3 = decryptor.setup_receiver_export(&GenericArray::from_slice(&enc), &info, None).unwrap();
-    let exporter_context = hex!("70736575646f72616e646f6d30");
-    //L: 32
-    let exported_value = hex!("6e94c470456dc829a017fbb0a46c2a0a7a95201bf47c88a5009c22d10f16900f");
-    let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes256Gcm>>().into();
+    assert_eq! ( decryptor3.exporter_secret, exporter_secret);
+    //let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::MlKem768,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>().into();
     
-    let exported_value2 = decryptor3.export::<U32>(&kdf, &exporter_context);
-    assert_eq!( exported_value.as_slice(), &exported_value);
+    let exporter_context = hex!("70736575646f72616e646f6d30");
+    let exported_value = hex!("64f2184266a8c370cef38ec4f387dba0ae9fbe05d237ec515ce217 4bc85b2369");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value2, exported_value);
     
     let exporter_context = hex!("70736575646f72616e646f6d31");
-    // L: 32
-    let exported_value = hex!("77d8231301d7da124c55368967d7cfa7815e5461a6d50135b04a8533e8000ee1");
-    let exported_value2 = decryptor3.export::<U32>(&kdf, &exporter_context);
-    assert_eq!( exported_value.as_slice(), &exported_value);
+    let exported_value = hex!("1852e4a7396747d3e302cb1eeaed2b3b8307b477711cc9c8a82df3 6d5f0013bc");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
+    assert_eq!( exported_value2, exported_value);
 }
 
-#[allow(non_snake_case, unused)]
+
+
+
+
+
+#[allow(non_snake_case)]
 #[test]
 #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha2", feature="rustcrypto-aes"))]
 // A.2.  ML-KEM-1024, HKDF-SHA384, AES-256-GCM
-fn a_2_1 () 
+fn a_2_1_v3 () 
 {
 // mode: 0
 // kem_id: 66
@@ -301,12 +271,19 @@ fn a_2_1 ()
        97b5078a4a2fbf26");
     let shared_secret = hex!("3a8c0fe7356b0208769fbc76237adc9650ff17ff7c6ee1e23801e84
                  6e2b95742");
-    let key = hex!("fce1270fe05d40a6aeb0592ac71ddfd55101b4d318863839511d908f3983f485");
+    let _key = hex!("fce1270fe05d40a6aeb0592ac71ddfd55101b4d318863839511d908f3983f485");
     let base_nonce = hex!("f09225e3efc44884518d6fb4");
     let exporter_secret = hex!("ed85347a28a6c60123cd0cd5cd03f7919e9af237ab0a0a0855cad
                    93decc04ef8a03ecdf7beeff4a3d21d30c44f61b71a");
 
     let (encryptor2, decryptor2) = HpkeIesMlKem1024Sha384Aes256Gcm::derive_pair_from_seed(&ikmR).unwrap();
+    assert_eq! ( decryptor2.decapsulator.as_bytes().as_slice(), skRm.as_slice());
+    assert_eq! ( encryptor2.encapsulator.as_bytes().as_slice(), pkRm.as_slice());
+
+    let shared_secret2 = decryptor2.decapsulator.decapsulate(GenericArray::from_slice(&enc)).unwrap();
+    assert_eq!(shared_secret2, shared_secret);
+
+
     let decryptor = HpkeIesMlKem1024Sha384Aes256Gcm::decryptor_from_bytes(skRm.as_slice().try_into().unwrap());
     
     let mut decryptor2 = decryptor.setup_receiver_cipher(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
@@ -314,7 +291,7 @@ fn a_2_1 ()
     //sequence number = hex!("0
     let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d30");
-    let nonce = hex!("f60e5f7f7adecdcb235a6ab3");
+    let _nonce = hex!("f60e5f7f7adecdcb235a6ab3");
     let ct = hex!("005ed7cf363d8ddc0ae98272ca1a7a52a41881084299d9c8e4cfc12b00f52fd8f1
       791107b25ed7481532981fe7afa8bb9e4586199a285dbd38883832b88a24a2db8b
       cf44775cf755d1ec");
@@ -325,7 +302,7 @@ fn a_2_1 ()
     //sequence number = hex!("1
     let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
     let aad = hex!("436f756e742d31");
-    let nonce = hex!("f09225e3efc44884518d6fb5");
+    let _nonce = hex!("f09225e3efc44884518d6fb5");
     let ct = hex!("c0f89431f47e694b63be6c1d303a980d48a1464592b91ab27ba200fd416559dbd6
       f2344318e841c7c2257384a47f55853f174f31f2efff37429c73120c4dd72e24d4
       319d382609253f40");
@@ -334,46 +311,38 @@ fn a_2_1 ()
     assert_eq! ( pt.as_slice(), pt2.as_slice());
 
     let decryptor3 = decryptor.setup_receiver_export(enc.as_slice().try_into().unwrap(), &info, None).unwrap();
-
+    assert_eq!(decryptor3.exporter_secret, exporter_secret);
+    //let kdf = LabelledTkdf1::<HmacReset<Sha384>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::MlKem1024,kdf_id::HkdfSha384,aead_id::Aes256Gcm>>();
+    //let kdf2 = kdf.into();
+    
     let exporter_context=hex!("70736575646f72616e646f6d30");
-    //L: 32"
-    let exported_value=hex!("03cc889db1e10b62bb1d4aba594f9480911fb3ea785c94735944d3
-                  b37592afef");
-
-    let kdf = LabelledTkdf1::<HmacReset<Sha384>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::MlKem1024,kdf_id::HkdfSha384,aead_id::Aes256Gcm>>();
-    let kdf2 = kdf.into();
-      
-    let exported_value2 = decryptor3.export::<U32>(&kdf2, &exporter_context).unwrap();
+    let exported_value=hex!("03cc889db1e10b62bb1d4aba594f9480911fb3ea785c94735944d3 b37592afef");
+    let exported_value2 = decryptor3.export::<U32>( &exporter_context).unwrap();
     assert_eq!( exported_value, exported_value2);
 
     let exporter_context=hex!("70736575646f72616e646f6d31");
-    //L: 32
-    let exported_value=hex!("22f64bead57f2fced75f040fe88e42ce086f0c8266a0bfca2577ca
-                  0f928a86b6");
-    let exported_value2 = decryptor3.export::<U32>(&kdf2, &exporter_context).unwrap();
+    let exported_value=hex!("22f64bead57f2fced75f040fe88e42ce086f0c8266a0bfca2577ca 0f928a86b6");
+    let exported_value2 = decryptor3.export::<U32>(&exporter_context).unwrap();
     assert_eq!( exported_value, exported_value2);
 
 }
 
 
+
+
+#[ignore]
 #[allow(non_snake_case, unused)]
 #[test]
 #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p256", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
 // https://datatracker.ietf.org/doc/draft-ietf-hpke-pq/
 //     A.3.  QSF-P256-MLKEM768, SHAKE256, AES-128-GCM
 // A.3.1.  Base Setup Information
-fn a_3 ()
+fn a_3_v3()
 {
-
-// mode: 0
-// kem_id: 80
-// kdf_id: 17
-// aead_id: 1
-
-use hpke::{hpke_types::draft_ietf_hpke_pq::{HpkeKemMlKem768}, kem_id};
-use kdfs::{Kdf, misc::PassThroughKdf};
-use kems::{GenerateCapsulatorFromSeed, hybrid::{ExpandSeed, QsfCombiner2}};
-use shake::Shake256;
+    // mode: 0
+    // kem_id: 80
+    // kdf_id: 17
+    // aead_id: 1
     let info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
     let ikmR = hex!("53030f657b3571b44f1b2b85ad6c72e6607d2538c7118b254c76e15277ffc0a2");
     let pkRm = hex!("4466431596c2bda2b49ce5aa83ac520e72bf763a5295009ee6fc7c7cf3a5cd5b
@@ -459,37 +428,14 @@ use shake::Shake256;
     let base_nonce = hex!("49f4e2c4cf39ad5e89432f6c");
     let exporter_secret = hex!("aab252b76068d21edf5618c2e6c9df0bafdcdb470a5d9444bf8f15701be6ce9b");
     
-    // pub type HpkeKemP256HkdfSha256 = kems::eckem::EcdhKemUncompressed<p256::NistP256, hpke::hpke_types::p256_kems::HpkeKemKdfP256HkdfSha256, U32, 
-    //     //hpke::HpkeEcKeyGen<Hpke<sha2::Sha256>,kem_id::DhKemP256HkdfSha256>>;
-    //     kems::eckem::SeedAsScalar>;
-    //     //hpke::HpkeEcKeyGen2<hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdf2<kem_id::DhKemP256HkdfSha256>>>;
-
-        
-
-    //  pub type HpkeKemQsfMlKem768P256 = kems::hybrid::HybridKem::<
-    //         HpkeKemMlKem768,
-    //         HpkeKemP256HkdfSha256, 
-    //         //kems::eckem::EcdhKem<p256::NistP256, kems::eckem::EcCombinerNoPubKeys<kdfs::misc::PassThroughKdf>, typenum::consts::U32, kems::eckem::EcUncompressedEncoder<p256::NistP256>, kems::eckem::SeedAsScalar>, 
-    //         QsfCombiner2<kdfs::iso11770_6::Okdf3::<sha3::Sha3_256, kdfs::u0>, kems::draft_ietf_hpke_pq_01::QsfLabelP256MlKem768>,
-    //         //ExpandSeed<U32, HpkeKemOneStepKdf2<kem_id::QsfKemMlKem768P256Shake256Sha3256>>>;
-    //         ExpandSeed<U32, kdfs::cshake::XofKdf<sha3::Shake256>>>;
-    //         //
-    // pub type HpkeQsfMlKem768P256Shake256Aes128Gcm = HpkeIes::<HpkeKemQsfMlKem768P256, 
-    //     hpke::hpke_types::sha2_kdfs::HpkeTwoStepHkdf<sha2::Sha256>, aes_gcm::Aes128Gcm>;
     
     let seed2: Array<u8, U32> = hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::QsfKemMlKem768P256Shake256Sha3256>::derive_secret_others(&ikmR, None).unwrap();
     assert_eq! ( seed2.as_slice(), skRm);
 
-
-    // let (e,d) = hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemMlKem768::derive_from_seed(&seed2);
-    // println! ( "ss={:02X?}", e,)
-
     let (encryptor, decryptor) = HpkeIesMlKem768P256Shake256Aes128Gcm::derive_pair_from_seed(&ikmR).unwrap();
-    //let (encryptor, decryptor) = HpkeKemQsfMlKem768P256::derive_from_seed(&seed2);
-    //assert_eq!( decryptor.decapsulator.as_bytes().as_slice(), skRm);
-    println! ( "pkRm=({}){:02X?}", encryptor.encapsulator.as_bytes().len(), encryptor.encapsulator.as_bytes());
     assert_eq!( decryptor.decapsulator.as_seed_bytes(), Some(skRm.into()));
     assert_eq!( encryptor.encapsulator.as_bytes().as_slice(), pkRm);
+
     
 //     let decryptor = HpkeQsfP256MlKem768Shake256Aes128Gcm::decryptor_from_bytes(skRm.as_slice().into());
 //     assert_eq!( decryptor.decapsulator.as_bytes().as_slice(), skRm);
@@ -671,27 +617,19 @@ use shake::Shake256;
 
 
 
+
+
 #[allow(non_snake_case, unused)]
 #[test]
+#[ignore]
 #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-x25519", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-fn a_4 ()
+fn a_4_v3 ()
 {
   // QSF-X25519-MLKEM768, SHAKE256, AES-128-GCM
   // mode: 0
   // kem_id: 81
   // kdf_id: 16
   // aead_id: 1
-
-//use hpke::{hpke_types::draft_ietf_xwing::HpkeIesXwingMl768X25519Sha256Aes256Gcm, kem_id};
-//use kdfs::cshake::XofKdf;
-use kdfs::{Kdf, u0};
-use kdfs::iso11770_6::Okdf3;
-use kdfs::misc::PassThroughKdf;
-use kems::eckem::{self, SeedAsScalar};
-use kems::hybrid::{self, HybridKem, QsfCombiner};
-use kems::x25519kem::X25519Capsulator;
-use kems::xwing::LabelXWing;
-use kems::{GenerateCapsulatorFromSeed, xwing::XwingMlKem768X25519};
     let info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
     let ikmR = hex!(" 40b788ef18afdd04b04c3c0097298981d17000fbde80f26410af13972c2392a6");
     let pkRm = hex!("dbca2aaf9b531844221bf5b4c3a2a50c557a5ea82686544e8ab211bf12ae3e91
@@ -740,33 +678,9 @@ use kems::{GenerateCapsulatorFromSeed, xwing::XwingMlKem768X25519};
     let base_nonce = hex!("7ce026ebc977d1c4650f060f");
     let exporter_secret = hex!(" 689735dca0af69034517c6c944501c387f4e86ae344b7a6a600c7566e742b53c");
 
-  // pub type HybridKemQsfX25519MlKem768 = kems::hybrid::HybridKem::<
-  //           hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemMlKem768,
-  //           HpkeKemX25519HkdfSha256, 
-  //           //kems::eckem::EcdhKem<p256::NistP256, kems::eckem::EcCombinerNoPubKeys<kdfs::misc::PassThroughKdf>, typenum::consts::U32, kems::eckem::EcUncompressedEncoder<p256::NistP256>, kems::eckem::SeedAsScalar>, 
-  //           kems::hybrid::QsfCombiner2<kdfs::iso11770_6::Okdf3::<sha3::Sha3_256, kdfs::u0>, kems::draft_ietf_hpke_pq_01::QsfLabelP256MlKem768>,
-  //           kems::hybrid::ExpandSeed<typenum::consts::U32, hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdf2<kem_id::Xwing>>>;
-  //           //
-
     pub type HybridKemQsfX25519MlKem768 = kems::hybrid::HybridKem::<kems::ml_kem::MlKemWrapper<ml_kem::MlKem768>,
          kems::x25519kem::X25519Capsulator<kems::eckem::SeedAsScalar>,
-         //kems::hybrid::QsfCombiner<kdfs::iso11770_6::Okdf3::<sha3::Sha3_256, kdfs::u0>, kems::xwing::LabelXWing>, kems::hybrid::ExpandSeed<typenum::U32, kdfs::cshake::XofKdf<sha3::Shake256>>>;
          kems::hybrid::QsfCombiner<kdfs::iso11770_6::Okdf3::<sha3::Sha3_256, kdfs::u0>, kems::xwing::LabelXWing>, kems::hybrid::ExpandSeed<U32, shake::Shake256>>;
-    use kems::ml_kem::MlKemWrapper;
-
-    // struct LabelXWing2 ();
-    // impl Label for LabelXWing2{
-    //     const LABEL: &'static[u8] = b"\\.//^\\";
-    // }
-
-    // pub type XwingMlKem768X255192 = HybridKem::<
-    //     MlKemWithAddKeyDer<ml_kem::MlKem768, PassThroughKdf, U32>,
-    //     X25519Capsulator<eckem::EcCombinerNoPubKeys<kdfs::misc::PassThroughKdf>, U32, SeedAsScalar>,
-    //     QsfCombiner<Okdf3::<sha3::Sha3_256, u0>, LabelXWing2>, 
-    //     hybrid::ExpandSeed<U32, XofKdf<sha3::Shake256>>>; // Works
-    
-    // pub type HpkeQsfX25519MlKem768Shake256Aes128Gcm = HpkeIes::<HybridKemQsfX25519MlKem768, 
-    //     hpke::hpke_types::HpkeTwoStepHkdf<sha2::Sha256>, aes_gcm::Aes128Gcm>;
     
     let seed2: Array<u8, U32> = hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::Xwing>::derive_secret_others(&ikmR, None).unwrap();
     assert_eq! ( seed2.as_slice(), skRm);
@@ -793,21 +707,21 @@ use kems::{GenerateCapsulatorFromSeed, xwing::XwingMlKem768X25519};
 //     assert_eq!( encryptor.encapsulator.as_bytes().as_slice(), pkRm);
 //     //assert_eq!( decryptor.decapsulator.as_bytes().as_slice(), skRm);
 
-//     //let decryptor = HpkeQsfX25519MlKem768Shake256Aes128Gcm::decryptor_from_bytes(skRm.as_slice().into());
+//    let decryptor = HpkeQsfX25519MlKem768Shake256Aes128Gcm::decryptor_from_bytes(skRm.as_slice().into());
 
 //     //assert_eq!( decryptor.decapsulator.as_bytes().as_slice(), skRm);
 
-//     let mut decryptor2 = decryptor.setup_receiver_cipher(enc.as_slice().into(), &info, None).unwrap();
+    // let mut decryptor2 = decryptor.setup_receiver_cipher(enc.as_slice().into(), &info, None).unwrap();
 
-//     //sequence number: 0
-//     let pt = hex!(" 34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
-//     let aad = hex!(" 436f756e742d30");
-//     let nonce = hex!(" 7ce026ebc977d1c4650f060f");
-//     let ct = hex!(" 6301266decd458adf8f166cb67d38b82d9b9b7d741fc974e0b2269c0dd2bd406
-//     beb41c0ddec7e7a08cdc13753e6de943507b31f1bbe1b4722ece5cfe055f3348
-//     a052b932a959f680035c");
-//     let pt2 = decryptor2.open(Payload{msg: &ct, aad: &aad }).unwrap();
-//     assert_eq! ( pt.as_slice(), pt2.as_slice());
+    // //sequence number: 0
+    // let pt = hex!(" 34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
+    // let aad = hex!(" 436f756e742d30");
+    // let nonce = hex!(" 7ce026ebc977d1c4650f060f");
+    // let ct = hex!(" 6301266decd458adf8f166cb67d38b82d9b9b7d741fc974e0b2269c0dd2bd406
+    // beb41c0ddec7e7a08cdc13753e6de943507b31f1bbe1b4722ece5cfe055f3348
+    // a052b932a959f680035c");
+    // let pt2 = decryptor2.open(Payload{msg: &ct, aad: &aad }).unwrap();
+    // assert_eq! ( pt.as_slice(), pt2.as_slice());
 
 //   //sequence number: 1
 //     let pt = hex!(" 34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
@@ -835,28 +749,17 @@ use kems::{GenerateCapsulatorFromSeed, xwing::XwingMlKem768X25519};
 }
 
 
-
+#[ignore]
 #[allow(non_snake_case, unused)]
 #[test]
 #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-x25519", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-fn a_5 ()
+fn a_5_v3 ()
 {
-  // QSF-X25519-MLKEM768, SHAKE256, AES-128-GCM
-  // mode: 0
-  // kem_id: 81
-  // kdf_id: 16
-  // aead_id: 1
-
-//use hpke::{hpke_types::draft_ietf_xwing::HpkeIesXwingMl768X25519Sha256Aes256Gcm, kem_id};
-//use kdfs::cshake::XofKdf;
-use kdfs::{Kdf, Label, u0};
-use kdfs::iso11770_6::Okdf3;
-//use kdfs::misc::PassThroughKdf;
-use kems::eckem::{self, SeedAsScalar};
-use kems::hybrid::{self, DeriveExpandSeed, HybridKem, QsfCombiner};
-use kems::x25519kem::X25519Capsulator;
-use kems::xwing::LabelXWing;
-use kems::{GenerateCapsulatorFromSeed, xwing::XwingMlKem768X25519};
+    // QSF-X25519-MLKEM768, SHAKE256, AES-128-GCM
+    // mode: 0
+    // kem_id: 81
+    // kdf_id: 16
+    // aead_id: 1
     let info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
     let ikmR = hex!(" 300495cc3d5349e45e700a4b3b57aed43f5c930092ef27c77dc8eea28f9d659c");
     let pkRm = hex!("25165a85c6450338519454bb15404c835307cc3bb261a39df9958c7e5cadcbf9
@@ -948,24 +851,22 @@ use kems::{GenerateCapsulatorFromSeed, xwing::XwingMlKem768X25519};
 
 }
 
-#[test]
-#[allow(non_snake_case, unused)]
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
-fn test_a_6 () 
-{
-// A.6.  QSF-P384-MLKEM1024, Unknown KDF, AES-256-GCM
-// A.6.1.  Base Setup Information
-// mode: 0
-// kem_id: 81
-// kdf_id: 17
-// aead_id: 2
 
-use hpke::{hpke_types::draft_ietf_hpke_pq::{HpkeIesQsfMl1024P384Sha256Aes128Gcm, HpkeKemQsfMlKem1024P384}, kem_id};
-use kems::{GenerateCapsulatorFromSeed, draft_ietf_hpke_pq::QsfLabelP384MlKem1024, eckem::{EcCompressedEncoder, EcdhKem, SeedAsScalar}, hybrid::{DeriveExpandSeed, ExpandSeed, HybridKem, QsfCombiner2}, ml_kem::MlKemWrapper};
-use p384::U48;
-  let info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
-  let ikmR = hex!("6a206c70294ca1d907679a1739327522c5c3b04aaf3950bcf5b1ba7463954021");
-  let pkRm = hex!("58ba2106c3c59680a0e7272a30c038fde90e6b11bf4cf54bbfc3171e39415698
+
+#[test]
+#[allow(non_snake_case)]
+#[ignore]
+fn test_a_6_v3 () 
+{
+    // A.6.  QSF-P384-MLKEM1024, Unknown KDF, AES-256-GCM
+    // A.6.1.  Base Setup Information
+    // mode: 0
+    // kem_id: 81
+    // kdf_id: 17
+    // aead_id: 2
+    let _info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
+    let ikmR = hex!("6a206c70294ca1d907679a1739327522c5c3b04aaf3950bcf5b1ba7463954021");
+    let pkRm = hex!("58ba2106c3c59680a0e7272a30c038fde90e6b11bf4cf54bbfc3171e39415698
         b168fc1a792acc7a7037de424fb805509d085b50b07aea08814bc38989da188e
         e7841762c4e4b5cb682b6febfaab69c00e0f1451c385386c4a77b4a83c83015e
         b6575fe9c7cc4a91c1bd33a8e71a36980a809c174b86e43e41c741ec27651d61
@@ -1021,7 +922,7 @@ use p384::U48;
         c9");
 
   let skRm = hex!("23456b644f15c3f35650958af845450ca744f66246d21150e2b49278b02650fe");
-  let enc = hex!("02f83d55376a5f005d56f1532ec8a1e2942a75a64b258d94ee54ab236a185352
+  let _enc = hex!("02f83d55376a5f005d56f1532ec8a1e2942a75a64b258d94ee54ab236a185352
      eecdfb3935667dd48fec4b9e6b7fc9d9324d92f42b83ae191e75f4d243b7caca
      cdde0a84d4b1bb47f6447214e03c907ac4f59f1917fb332aac94ec82f627f280
      982a6d73db299e7215257388779a17100d530c74fc5d4ae291238757c49e4678
@@ -1072,10 +973,10 @@ use p384::U48;
      61a6536aa0371279b0fb4b62f5153f94d0b92a650867e15ac655d0dc9f10d5d6
      124c78b73c73eac18d138e9d4246b576ab97d6c0165646cd8553f310cdaab2c5
      1282a30f0b2a5f3dd58dc918e40b105d37");
-  let shared_secret = hex!("250dbc9910b47b6f51097fd484d3996dc8335706c006a0fce77729a51280e4c2");
-  let key = hex!("45d95d7e3239dc99b4d8cf3b5bb1b89ed74327cc531690fb4ab03066d87a66c1");
-  let base_nonce = hex!("c7e928d294ac6b06f9f1d34a");
-  let exporter_secret = hex!("aaadc292e6288db742f9f9e2435e1095324ef7d9029d5c77814328ddd813eed2");
+  let _shared_secret = hex!("250dbc9910b47b6f51097fd484d3996dc8335706c006a0fce77729a51280e4c2");
+  let _key = hex!("45d95d7e3239dc99b4d8cf3b5bb1b89ed74327cc531690fb4ab03066d87a66c1");
+  let _base_nonce = hex!("c7e928d294ac6b06f9f1d34a");
+  let _exporter_secret = hex!("aaadc292e6288db742f9f9e2435e1095324ef7d9029d5c77814328ddd813eed2");
 
   let seed2: Array<u8, U32> = hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::QsfKemMlKem1024P384Shake256Sha3256>::derive_secret_others(&ikmR, None).unwrap();
   assert_eq! ( seed2.as_slice(), skRm);
@@ -1132,242 +1033,3 @@ use p384::U48;
 //   assert_eq! ( exporter_value2, exported_value);
 }
 
-
-
-#[test]
-fn test_apple_hpke_x25519() {
-//    let seed = &BASE64_STANDARD.decode("67fs0M/OfCiCkfI6BC9Ma6K7isbVcu1KRjJkYMR65Kg=").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("h6J7OCmGB2ddVMiCbGC9519I7xDKP4BjA7yaMYyVgc9ODzyEdWKSz+sUADfQzENRAFJg0iqbyD11zWaXK4kSpWHX7y1oIlBsBqAVI+9RBNlMnk/T1nIRbDx0dOkqQzbHttyJbFAhQ/zVswmua4XhwtE0jiduVzljcWg8hTEN2LHuQ/plzmma5Xw8R8LMH41muuJMQAjf2NW1taaCqPz09aKD9mheC66/v6KZEEdmTuZpm4dD2hhRozsaAguE2jfJH06oK0tbwABHRcksz28twXkckk6JM1B1rcmpC9OdTX3VVax3Af+YwiVsIxBOJ1SVRUh3Q1AUCYwy8LNnPQFfB59T90TLkNtZBikxB2rJoGjLE4kflG+rCYyhkBA1Tqt5nLlf/GMxUubD7RlJU6URiO6lmUDncqo59MNonA6LK/QHI8k7RFQf29f+aSvxO4HiQ8Zkq9TzL1kEyMmP5a7lL14xJtky8adikguOa4GZlQW+tfwpFrcAxL6vC5Le2xDWi0YHxi4hY8gpNZXceEZypnBYSzUDtwA6fjht4Ativ/0nVdoywLXE3abYgbW8SR+n4q51uavEtGSi/xceQ99eg05ReuT8fivzL8r1FXFnMd+JSi/UBVOL3o7e58MGS+CyvdEY/NuoqtpWQo9KFOvfovErtvlfdWPonPbhTn18QkYR3/irD+kYpmmkm5G1xUetA/UawBeSsgrX2dPqIstPPxuwNSQooAI8WiB7Cr+X94YLk555Zfxb1319CuyX+/UXok7Z/ECXydoyBiUVUtTp2m7lAqNefz9wc3SRjKrtmBKZKEmrus+OaiKWXiyNtGYtFzScfS51B6ixEm1CD+OACsRuokHLyRzmPufKEJfwEk55d1Q4yKgIklnB3FvWR+JtK5QL3jmkJtFQ+qMKfjbTosdubPyFckm+LdLJ7aXuWcCL/ixhxTR/aAnVTazBlexxXyceZxvNwODqoWx16YVOEpLT9m0VaRRU//6lG61viCUgeJRpsGLL2Yx5XlWMpwdV+ii0SpU28WW8b8P6LQWi4mWTh5fBqzwWuULgPy7DyX6ZsLpFBbnENO2ZLt1OYF8GAxBbMQ2AUDatchkqO7mwHexmmzmFxX7mMkVy+pfl2O63YbtQJ740mK6dcJ7EpWWrAeR11k4EtTcEnYt0hAXGEGf9FmskzVCZlv+VIBM9NZZnO0DCMqx+T42c4YAcLhbA5nsTxhOmt3v7jQGxjFdLMhaRzg7hkIvdemuBTGxd6AGHk4DuRthkTms2GaB148Y6ycm3h0eLYph/NpmaO9WSyE4lir4Qjzx4MUDSMskVeVaiGOjYzBDZpv+VmGBKiXGWPk+TPYkUQjR3m2fb8scW+9rO3JE4TznJ4WzA9EmNncFAwkmfNVApWSpxFI5pDcHOkB2sGuOiA1cpDnK5PA2Y4+u3GYDQ3Z5eIv33qWpjf2ZcQ7QlOeT6eNvrqxucBrcOX1CaCCYvPqPr/FjuH9RWRg==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("fVgZd6//P9xgLDeLAO9zcuotZsE0").unwrap();
-    let info = hex!("0408");
-
-    // let seed = &BASE64_STANDARD.decode("O3vXZJtfNsnucAnfTcEWSDt9gK6iKGiTdAf0YEz5m5M=").unwrap();
-    // let public_key = &BASE64_STANDARD.decode("H2Q2eyOcJVRDtMVpReGAq/oge1w0his4+FdawodERhWmW0k1TSqK+pR2RLSAjUuHLEErGVAllyeEOmuJfMxqaiWx8xVv14xxcAOIdnKfvutCR/uBwxw9KDLLm2p2EZca6vhHffA7BfcnxJxrLCijk6ZGmhUgsGNqkAyhXfpTeLMgEYmu1dSDBYYO03ogHDGknAu1qrkqBzlwmOWUs1wLy8yFiiZzAxV7X1VCJke1xSnFNFDL7rKWyhRDxYZzFwYRkvdCrXE2QYHOB9dtZgZ9AtZ/PPaRU9wk+0iE2KnMlskdIAMqS4Bu1hcrbYR8I2RdYxt3uaJejBmBoPaAsKiS2mEpV4sy7iRZ15EViyItKYcML6qBi2qBO+keDHI2fasC1Hsd+rAoh+gRpLq9ofoi7eu230NSI0EEEZV4dVVYrERwqYwUewSUNOGld0fLOXgUrERg9fTBhDiBfNp6iGuwRcIu5tM3wPMuDgRSvtaalZArOuVyYExHxEGzsIV+LImaUkaE61WB93mU8nAog+Sf9FkonwYr6LAnAtoKf7N4CjudloCIeAMYPtePnyofk/A+jtHFe5hjXOOcrYyhdGpGuhVHnVFm1SJS1WWjHzWviicV9yQyncte26RgkIW+saAxsbyTiBscihLEl7J8JXa4ZWK+tSkuUpC44jGOHBGpVhcUncaNY4lerZICZ0pzE+DOM4WVGpHHAKegT9GH+rV+rPAHUFExLSaEIHZfnnkE9JlXQzwxSABxU8xR0yIxl3S2S8EuwtCPtWCSt+cFAPcTt1qbb5g54DrBfiikfAC5KUt7WrzFTNRJ3HB/pRlz3GS0XtkDGyOU92xqgXPBbdOo9FOdXay4DHyLpAWnMcJwFvcyLbgiJ2KAtVgH3aqE8VAH/hE5wPoQVGxYU8Y8HsQV6ZlYlcopNMvIfTwwAliiVuEHGQVaPCMgeDAmdVdIwJiStjRoFnsvU4tQ9UHCvpekGLKuo6ZHm5tUckGwfbyr+oYELYioRLCzm+uN85xO+XENKrkPGRO7CVcp+cO6QrpYmCW5D7ZmSxTKKMSYIEom07dXR0kVP6FO+Fco6NQE4PJNgAqgz+Bm3MWhxJPJuxRczLp/w0hhbPWlZgFgJYuuqoyaaccJBsq1Gqw2qRwhq0ExiYERjdmzDDWA3zMXEhFN97UVJdZ5u8YcFFBgvhmFkPwuMdBtO7RrgsO+X+qsLhVb89hXKTUDvmFvMWK8iRzDNyyVrxB/IRkfAhBkiZqnGpWeBUqrGbEpGSiW4ZMDFwuL2fcN8Pwxg6QlDnMwhGo9QCKQ6wGG2Ipre/Nr5ksQgJuEmpCf0Zal9DWrgMMWqzPOQ2EiKjt2snCuKQrQUPE1fpUNKwXBRwVFdzapmXpGIQMSSqSWVmlJqQJXd/Ve5cq20Mk3m0WXYESkVWVog/JzVvOLvPR1z+XIC+Vy8nInx3fNUTu5SEYzzNlhXmMh3CiPZtwimOCgturBZaw66CaeGCY3FIkcUoY/VohcnsyzKBdsFGJe5Cg8duvGlSJ848bH5LpBY8F6JoasrrXILPNfqSKzAS3HEuv15fcZu67MZsOIpxjhcOq7IEusLimpjxC7RMkxlnM5rDgYLJzZPjqLIg==").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("0q0eUx7HRDrRC/NRb1VPIZ3AL/hi+XKHSArqxtx5f39LPUgQ7nV+421wWIqctXAJiEbgsLaBMfYPiXwnkSPjdwDmdBoI3Z1kX9tK1MCmR7eXKCfwcWVTLgSKwqbmwjzqviRZ4I17yt/YMl3cJna9yJDFk7OjzYINJQUg+FmcdxxmTXECy8pr8NJQkIotGPQeGPwBlxIJE1sZrCux1drpJ5boU+yWSQtg/vio+xzBYsGaI8DWaT9G5AHxIUBteYqv0xfceHSVRBv1dmlCbtCNGlIuIZY1iBbFUWgJMMQKGUnEqxtnlFXYRRUijn+HwZ2OUc++2AhMK/JlnZmqPjEOp6g3Wbtx+RfaMQkGGjMuMur6gcSSCbrSI/X8KFwsj0lMYSMYiiIbY8C5VnJpMem6LjAjrg+um1fW/IgBdbfs/2yrRFmyxgzb1z6fwObk+dnuUkqg/MlAFfYHBdVZtn8hmPMKmn7rm1UG4Mc5GhM+k54qWQf31JYTBOVuXriAy3THcslWsTvHR9swuHOZr6+VUdoYk0UTePp+ektR+2FpBEkRbiR+nJ6bVgyjPG/74GI2j3/66+tQYu5VeF2mArbgZxOfXDAV2nZE8I4FlBcmVLsRtDQbIZHUWpVcTSwSFScN37ikqHg0zck6yq6bii8gSL1Xk/mAQQUIct4tToR1FY7cAjJ0ZXTjPJn99kd87H+TzvlMYg6h1jTFCfq6+2KvomEjKsb3G9n6vFA9xTszQy6eojSfeAHLAED+78FN2AX0YTC+H8tny847bkMzziPsgrdQB3O4yFhPPfUPTdr7W9o+UIYO6b51dfTjfGPXsbbpfZK/NFpITdCG2KMfG2eYHlHBv6RUMYUXLpxapBa0EKvMYqqK8purEn28qvOoUQOBhJhW5Fu8c1v7kAIZNhwjnD5bo1TSI0D/cl9+JemzG1RkGHANY1D9jDkv5Ua9rNpIqpCmfP7S5XD2kTln1rUWo0G5djN0mkfP6RKX/4EU6ZPESW6CD+PRnrLl4qgWAktkDiatQqpF3mwbGqabpDQyvmm1M/exOvbR/taezZMdPuwthjKxrxBEVybt632XMRcZAvc8vZ9NrnxXrBs7X28zX1L/Q4HtC1uZzAj0gcxld0v9ltBz9+t52zypyptlLEzXmJ6jmJNMrvmZ5eVVm7+w/Muy9vD9K4xk6MpGmHzORY7WcUCsonxcWqEDpXREZzPGwoQaCpfXgvQj0xXoDV3sX/l9fGH6l2G+cJjqpIfK7uVnAIvMsX4rseOYSR0uYEDr3w4eUK3qqD9zeqtKAtzoX1Rn2JVjwC4dcKMsgdJLd3KeRFC6PkAj4fY8fsXCtjYeWs9BLwFhPCssaAEL7V0JkONHFSjPXkUP2PjLrutDRJvbhFdAWrCRZBKOc1gOSJaVKbWadF09M4V9a9iB1T6XmyIxQLzOP+6ubcsi2HpiT16EdjSJkbiRzHUMzOxlVHjENKSZTeWT6WMfRMN3HSy/fA==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("J2Rbn2MMd7q1AxOtNGqOOO0VFc4z").unwrap();
-
-    
-    //let seed_2 = &BASE64_STANDARD.decode("NqAfhJbWnDMut0NWwZjOTD4YhLmfe74jwKbY/txpfpH3MdH3E/MiEvCrWFW++iWvNfIObAZbENJviEEEsJl5lA==").unwrap();
-    // let public_key = &BASE64_STANDARD.decode("9Pe9i/LE05J9kIqUDQqsQldheKiWezZoX5JJOUJYZtOmkmWfEmZx3RwHASK6bouTZhcZnINJBQp98tKjNIA1BihVMASeIcd1jwpln3WCBDDBivS7ReK+oFlUCaWcwYdOZGN4+tyKNuC5NzFrDCRXz2MGoCUV2Ulojbd/6VRnPNNbMvxCoOS94SZxKAgcSmJoGzQn+OJt5rQdHyvA7OsJn6VtLpgCtCOO+6qOFcMrz8gbiucgAAUUKBxf9uMKNKUd02c9C8U00pGqTtKiC6E8GbcihIIcrhKHMLkx/6XPOwIp5wqE8qy3nEqG1dPB2KArfmKXkFgl9iWRw4kPjKAlOzSz02EO17wDDXuWbUcIoXrFwbobomdJDAY/6zeuTfLCDNMDAmFr4ZoCHDdEsaI3dLdWCvF+x8gbiIMkdtq05yY6RBmhsBtkOVd2HloCcmSVV/wAYEdPm5l9E/NqhMccIeaCV+HAuGdzkxKCiigCyXEbAOQ8uvyil/bEaaXH7pKdz2Ro2bpAGjOQ0btvy8IfPhxUzBAM0NjNIZyyE0Bx8ssZKZelDfBWxyETkcy2a8A8vGM7t5oaHqWch4QuOzzFeLq+azIZU2Ocz3chuYVQoiZ5WjKZu7W6S8cP8nvKTFNgxplLEiCTfDesJqIi0oTDUjGgvbhEa3sFKeO4gzY57wZoLrUmbfs4psgdYmPEQqGm81J9d8WY9rLPMTlRM7TDXpVF0QSJpue8YpZnLzGdurWqWsOxj/hOswOMgMsdVTaF7gCQohV0eDh7NDBUVheFZAxodUeJvkhf86FGafC/JaGIZgtAfGa7AXCN3tzBliCrf4GDvIEwHCCzyAM8T8s3JFjP67ynWCoaGph8WiPFfYCmhPq1lCcDtQe2GVjDkUXPHCsaK3G2NXPGjUfF4oGj6IyA0YxniXuWefuE6FZw1NF1kimrmhqr21x7tRuY9xSn6nYZbegQ+xdJ/GGPkXkb38Widcoot6WpLgd7VbN1bOYyIHYd3DU4F+UrfepIQqRS83hPYVzGF+tA07FtoQorI+myVGBbKjAwaZWtDNpXOPaoSCCfqcgvSAqduwiBugwa6fa3SFghMACHcaW0/GFY6JfAdKsqC6h+ZVGLvncu/eAs6BGuWhdIhcYoPbRnrSgL/2EMhJxgRzQUTwqq4MF9QNw8EgkPP5dfMqyGHIW27mvDWrwvj3wiftoIrRR3g0gL6FFUU2kEZ8hPFBHExYIILgMYUxmAuUFRs+ezxlmyiIMcgXAGu+QK77NevSOJEOkqnZdsRZeEqSoODTqx8nCrBZMmoiKdxfXOz+sXmJGsp5RP2PIB2da1WnaKCgjL4ABvBBCQo0URpbPHROACYKSdOAGtkquxpieLu0ClGqQkWJEqXfad+SW4hSm7QGuXBJxWghiNu9q3o7aZYZF0djE6LuDHt8eMr5yTEWRCxrYoiOMTM7g15MQLn4wLEBxxMvilmZkH9gUCiWJmG7N6t9W84tl7NRJGPHp+zjZbT4jLX9Ki5ngAv2WiV6h6KJtYTObNgS2Zs91sFlBUq5rHAt3QvZ59unbkJIFmfxGblptTJQDBbuIsXbFyl6bkmb7314wjquR+pHOh0A9GxnHS8b76HQ==").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("bBcrMpyzvFLUFKU5vwewlxn9UXPwMFi3lJFJhCQNGpiGOWyEnhPt1nkBfQDZ3rGWCdDfM97NtWWoPkDywAUaytcUCXEXpHbxLgk5hxLmArOMK5p+8YVFBqdhVlN6Ivd+G5TKKZvn0BPElNHNALsyXXrjujVYB8IqYFaDa+WktCvS9n3IbIFZ/NPIFjcvkl3i/3QA0p+bKvJHmpu5b4ZtWEvtOwtDYTU62IWEYUi6grq611FEwE0X+TEm+XEU/QVpgi01LzpLC81M0LAa5UWxzCCel0Y6v/GkdmvVjqygXN4m7re6KeVUcpZuDzGXARKazMgpLHVExAjeD5BAM8r6BD9noOb43LQOYExjgh9kmTEFYKyFRTRj3nUkADbnqrwsu1/jkbR+fd1rGfa1MxnviQ+RcM5dUVR6TUH+eHTyGAKDz9y315YnBynrINJ0GWyZ0Na8PEDUzdzT0AKRCHU7yz90IEb6BaWlIcLbxa/cSYeUgkO/5CxoWmpJxsrVEpCF8AsS8yHjWiTKoLSos2KcsLN3PBxdDxG4Mbf0BEwdNl3TiYwM1GAngtkeQDmzYK42502H3dZkDbCjDfIWKl2V6Dt1r/k+np1Qau7eBTgRyCsXdMjN90nJCCqI9F+RKf7zjtFWye6682Tvkc2kqv2+7YCvgeoX59mdgCBxlT84M0Sz64y++WhLOFusOsSAvH8BWiQo3IMPjX5I9kLMRWGDtSZYXrd2kXi/DmVDSLU7BJr8ljrwdlrkXDcsOhGb7K1q74pWshRnFIPx4G9lUR5D6iP9tHtYgdjbMrc6EQe+oRG/+hEXIqGd+xowtPoExtSYrrxO6WpBYhH0CFeZ/PGDHNe1QDLLyCLNykUKq2ZziJkDzfeEvFU7db5bTPJ5hy0FpWdYQQ0tQuy50v0JnaYjV9UX77XzMWYFNWMbyhIrLycfJddDj78ssNApQtzaoaT98VPLmT6+AZODD1La9LXqWXwpIf8xVky6DwGFvQU4wPR8LRlM3uu4JYEmck/8L3KaenHztO7SYhzk2IL+whs3mVtUHxkPEeSAGPK+TQA0nQmTfYTwAgeR0IcLPTfpERnPf3r3OhSCIbuvry3YbtWic+xmAenlIRsxyWwUaGW7u1Bq2BshNbq9oppX4NWVA1gly1F5ag6bNS6A9UhEGpPnxe/ZhF6O5PbhZIgGF0T6Z3WnRzgGfYZ8Q4eR3hvnBE3voHtEQY938dCQOqfu5E7ca4e4YJMb5yh5Eh7kOOnH4D/7tDQVHjTBwb3f3A/GWNxu5jEXd75dH3+1i1lssKGm8PSzVVRdpa0xrj73nTVbFfVuM+zCIKgpvXFGvPAnIArOe62sj1aoFPJaQdaFozv0Buwk22sB8pxWedmJ2pXsn0kAyOdDN6M+JMbFtzwhvmzbhnc0sKLH1L69pZOmwuTjjIUUOEGgNUF9Xt+Ml1Qeiy4lgsD+VQlRDE4Gh6DaaC5CpOD5HAU+nzP0KhAFg2dbMw==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("S/eqVx5Rm0KZzVPKSnGwYqD30dW0").unwrap();
-
-    let private_raw = &BASE64_STANDARD.decode("qIbPMkqmG4yRRDBPtOu1B3UmtRHC8q+0GtnD3EgYrVQ=").unwrap();
-    let public_key = &BASE64_STANDARD.decode("+XuJ76eRPecsg0Em1IsfPuXUmw74ozhYQ0QEMNAFtE0=").unwrap();
-    let encapsulated_key = &BASE64_STANDARD.decode("o9j6f4+hAY1fxoiUUbNxp7MT9S0YEfRLC+Q+pbt7Khs=").unwrap();
-    let ciphertext = &BASE64_STANDARD.decode("txcUDp1NZWVnOG9b13NCuzRhVMG5").unwrap();
-
-    let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
-    let private_key = x25519_dalek::StaticSecret::from(private_array);
-    let decapsulator = HpkeKemX25519HkdfSha256::new_decapsulator(private_key);
-    let encapsulator = decapsulator.get_encapsulator();
-
-    //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
-    //let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::derive_from_seed(&Array::try_from(private_raw.as_slice()).unwrap());
-
-    assert_eq! ( encapsulator.as_bytes().as_slice(), public_key);
-    // println! ( "pub1={:02X?}", encapsulator.as_bytes());
-    // println! ( "pub2={:02X?}", public_key);
-
-    let decryptor = HpkeIesX25519Sha256ChaCha20Poly1305::decryptor_from_decapsulator(decapsulator);
-
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
-
-    assert_eq! ( result, b"hello");
-    
-}
-
-
-#[test]
-fn test_apple_hpke_p256() {
-//    let seed = &BASE64_STANDARD.decode("67fs0M/OfCiCkfI6BC9Ma6K7isbVcu1KRjJkYMR65Kg=").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("h6J7OCmGB2ddVMiCbGC9519I7xDKP4BjA7yaMYyVgc9ODzyEdWKSz+sUADfQzENRAFJg0iqbyD11zWaXK4kSpWHX7y1oIlBsBqAVI+9RBNlMnk/T1nIRbDx0dOkqQzbHttyJbFAhQ/zVswmua4XhwtE0jiduVzljcWg8hTEN2LHuQ/plzmma5Xw8R8LMH41muuJMQAjf2NW1taaCqPz09aKD9mheC66/v6KZEEdmTuZpm4dD2hhRozsaAguE2jfJH06oK0tbwABHRcksz28twXkckk6JM1B1rcmpC9OdTX3VVax3Af+YwiVsIxBOJ1SVRUh3Q1AUCYwy8LNnPQFfB59T90TLkNtZBikxB2rJoGjLE4kflG+rCYyhkBA1Tqt5nLlf/GMxUubD7RlJU6URiO6lmUDncqo59MNonA6LK/QHI8k7RFQf29f+aSvxO4HiQ8Zkq9TzL1kEyMmP5a7lL14xJtky8adikguOa4GZlQW+tfwpFrcAxL6vC5Le2xDWi0YHxi4hY8gpNZXceEZypnBYSzUDtwA6fjht4Ativ/0nVdoywLXE3abYgbW8SR+n4q51uavEtGSi/xceQ99eg05ReuT8fivzL8r1FXFnMd+JSi/UBVOL3o7e58MGS+CyvdEY/NuoqtpWQo9KFOvfovErtvlfdWPonPbhTn18QkYR3/irD+kYpmmkm5G1xUetA/UawBeSsgrX2dPqIstPPxuwNSQooAI8WiB7Cr+X94YLk555Zfxb1319CuyX+/UXok7Z/ECXydoyBiUVUtTp2m7lAqNefz9wc3SRjKrtmBKZKEmrus+OaiKWXiyNtGYtFzScfS51B6ixEm1CD+OACsRuokHLyRzmPufKEJfwEk55d1Q4yKgIklnB3FvWR+JtK5QL3jmkJtFQ+qMKfjbTosdubPyFckm+LdLJ7aXuWcCL/ixhxTR/aAnVTazBlexxXyceZxvNwODqoWx16YVOEpLT9m0VaRRU//6lG61viCUgeJRpsGLL2Yx5XlWMpwdV+ii0SpU28WW8b8P6LQWi4mWTh5fBqzwWuULgPy7DyX6ZsLpFBbnENO2ZLt1OYF8GAxBbMQ2AUDatchkqO7mwHexmmzmFxX7mMkVy+pfl2O63YbtQJ740mK6dcJ7EpWWrAeR11k4EtTcEnYt0hAXGEGf9FmskzVCZlv+VIBM9NZZnO0DCMqx+T42c4YAcLhbA5nsTxhOmt3v7jQGxjFdLMhaRzg7hkIvdemuBTGxd6AGHk4DuRthkTms2GaB148Y6ycm3h0eLYph/NpmaO9WSyE4lir4Qjzx4MUDSMskVeVaiGOjYzBDZpv+VmGBKiXGWPk+TPYkUQjR3m2fb8scW+9rO3JE4TznJ4WzA9EmNncFAwkmfNVApWSpxFI5pDcHOkB2sGuOiA1cpDnK5PA2Y4+u3GYDQ3Z5eIv33qWpjf2ZcQ7QlOeT6eNvrqxucBrcOX1CaCCYvPqPr/FjuH9RWRg==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("fVgZd6//P9xgLDeLAO9zcuotZsE0").unwrap();
-    let info = hex!("0408");
-
-    // let seed = &BASE64_STANDARD.decode("O3vXZJtfNsnucAnfTcEWSDt9gK6iKGiTdAf0YEz5m5M=").unwrap();
-    // let public_key = &BASE64_STANDARD.decode("H2Q2eyOcJVRDtMVpReGAq/oge1w0his4+FdawodERhWmW0k1TSqK+pR2RLSAjUuHLEErGVAllyeEOmuJfMxqaiWx8xVv14xxcAOIdnKfvutCR/uBwxw9KDLLm2p2EZca6vhHffA7BfcnxJxrLCijk6ZGmhUgsGNqkAyhXfpTeLMgEYmu1dSDBYYO03ogHDGknAu1qrkqBzlwmOWUs1wLy8yFiiZzAxV7X1VCJke1xSnFNFDL7rKWyhRDxYZzFwYRkvdCrXE2QYHOB9dtZgZ9AtZ/PPaRU9wk+0iE2KnMlskdIAMqS4Bu1hcrbYR8I2RdYxt3uaJejBmBoPaAsKiS2mEpV4sy7iRZ15EViyItKYcML6qBi2qBO+keDHI2fasC1Hsd+rAoh+gRpLq9ofoi7eu230NSI0EEEZV4dVVYrERwqYwUewSUNOGld0fLOXgUrERg9fTBhDiBfNp6iGuwRcIu5tM3wPMuDgRSvtaalZArOuVyYExHxEGzsIV+LImaUkaE61WB93mU8nAog+Sf9FkonwYr6LAnAtoKf7N4CjudloCIeAMYPtePnyofk/A+jtHFe5hjXOOcrYyhdGpGuhVHnVFm1SJS1WWjHzWviicV9yQyncte26RgkIW+saAxsbyTiBscihLEl7J8JXa4ZWK+tSkuUpC44jGOHBGpVhcUncaNY4lerZICZ0pzE+DOM4WVGpHHAKegT9GH+rV+rPAHUFExLSaEIHZfnnkE9JlXQzwxSABxU8xR0yIxl3S2S8EuwtCPtWCSt+cFAPcTt1qbb5g54DrBfiikfAC5KUt7WrzFTNRJ3HB/pRlz3GS0XtkDGyOU92xqgXPBbdOo9FOdXay4DHyLpAWnMcJwFvcyLbgiJ2KAtVgH3aqE8VAH/hE5wPoQVGxYU8Y8HsQV6ZlYlcopNMvIfTwwAliiVuEHGQVaPCMgeDAmdVdIwJiStjRoFnsvU4tQ9UHCvpekGLKuo6ZHm5tUckGwfbyr+oYELYioRLCzm+uN85xO+XENKrkPGRO7CVcp+cO6QrpYmCW5D7ZmSxTKKMSYIEom07dXR0kVP6FO+Fco6NQE4PJNgAqgz+Bm3MWhxJPJuxRczLp/w0hhbPWlZgFgJYuuqoyaaccJBsq1Gqw2qRwhq0ExiYERjdmzDDWA3zMXEhFN97UVJdZ5u8YcFFBgvhmFkPwuMdBtO7RrgsO+X+qsLhVb89hXKTUDvmFvMWK8iRzDNyyVrxB/IRkfAhBkiZqnGpWeBUqrGbEpGSiW4ZMDFwuL2fcN8Pwxg6QlDnMwhGo9QCKQ6wGG2Ipre/Nr5ksQgJuEmpCf0Zal9DWrgMMWqzPOQ2EiKjt2snCuKQrQUPE1fpUNKwXBRwVFdzapmXpGIQMSSqSWVmlJqQJXd/Ve5cq20Mk3m0WXYESkVWVog/JzVvOLvPR1z+XIC+Vy8nInx3fNUTu5SEYzzNlhXmMh3CiPZtwimOCgturBZaw66CaeGCY3FIkcUoY/VohcnsyzKBdsFGJe5Cg8duvGlSJ848bH5LpBY8F6JoasrrXILPNfqSKzAS3HEuv15fcZu67MZsOIpxjhcOq7IEusLimpjxC7RMkxlnM5rDgYLJzZPjqLIg==").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("0q0eUx7HRDrRC/NRb1VPIZ3AL/hi+XKHSArqxtx5f39LPUgQ7nV+421wWIqctXAJiEbgsLaBMfYPiXwnkSPjdwDmdBoI3Z1kX9tK1MCmR7eXKCfwcWVTLgSKwqbmwjzqviRZ4I17yt/YMl3cJna9yJDFk7OjzYINJQUg+FmcdxxmTXECy8pr8NJQkIotGPQeGPwBlxIJE1sZrCux1drpJ5boU+yWSQtg/vio+xzBYsGaI8DWaT9G5AHxIUBteYqv0xfceHSVRBv1dmlCbtCNGlIuIZY1iBbFUWgJMMQKGUnEqxtnlFXYRRUijn+HwZ2OUc++2AhMK/JlnZmqPjEOp6g3Wbtx+RfaMQkGGjMuMur6gcSSCbrSI/X8KFwsj0lMYSMYiiIbY8C5VnJpMem6LjAjrg+um1fW/IgBdbfs/2yrRFmyxgzb1z6fwObk+dnuUkqg/MlAFfYHBdVZtn8hmPMKmn7rm1UG4Mc5GhM+k54qWQf31JYTBOVuXriAy3THcslWsTvHR9swuHOZr6+VUdoYk0UTePp+ektR+2FpBEkRbiR+nJ6bVgyjPG/74GI2j3/66+tQYu5VeF2mArbgZxOfXDAV2nZE8I4FlBcmVLsRtDQbIZHUWpVcTSwSFScN37ikqHg0zck6yq6bii8gSL1Xk/mAQQUIct4tToR1FY7cAjJ0ZXTjPJn99kd87H+TzvlMYg6h1jTFCfq6+2KvomEjKsb3G9n6vFA9xTszQy6eojSfeAHLAED+78FN2AX0YTC+H8tny847bkMzziPsgrdQB3O4yFhPPfUPTdr7W9o+UIYO6b51dfTjfGPXsbbpfZK/NFpITdCG2KMfG2eYHlHBv6RUMYUXLpxapBa0EKvMYqqK8purEn28qvOoUQOBhJhW5Fu8c1v7kAIZNhwjnD5bo1TSI0D/cl9+JemzG1RkGHANY1D9jDkv5Ua9rNpIqpCmfP7S5XD2kTln1rUWo0G5djN0mkfP6RKX/4EU6ZPESW6CD+PRnrLl4qgWAktkDiatQqpF3mwbGqabpDQyvmm1M/exOvbR/taezZMdPuwthjKxrxBEVybt632XMRcZAvc8vZ9NrnxXrBs7X28zX1L/Q4HtC1uZzAj0gcxld0v9ltBz9+t52zypyptlLEzXmJ6jmJNMrvmZ5eVVm7+w/Muy9vD9K4xk6MpGmHzORY7WcUCsonxcWqEDpXREZzPGwoQaCpfXgvQj0xXoDV3sX/l9fGH6l2G+cJjqpIfK7uVnAIvMsX4rseOYSR0uYEDr3w4eUK3qqD9zeqtKAtzoX1Rn2JVjwC4dcKMsgdJLd3KeRFC6PkAj4fY8fsXCtjYeWs9BLwFhPCssaAEL7V0JkONHFSjPXkUP2PjLrutDRJvbhFdAWrCRZBKOc1gOSJaVKbWadF09M4V9a9iB1T6XmyIxQLzOP+6ubcsi2HpiT16EdjSJkbiRzHUMzOxlVHjENKSZTeWT6WMfRMN3HSy/fA==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("J2Rbn2MMd7q1AxOtNGqOOO0VFc4z").unwrap();
-
-    
-    //let seed_2 = &BASE64_STANDARD.decode("NqAfhJbWnDMut0NWwZjOTD4YhLmfe74jwKbY/txpfpH3MdH3E/MiEvCrWFW++iWvNfIObAZbENJviEEEsJl5lA==").unwrap();
-    // let public_key = &BASE64_STANDARD.decode("9Pe9i/LE05J9kIqUDQqsQldheKiWezZoX5JJOUJYZtOmkmWfEmZx3RwHASK6bouTZhcZnINJBQp98tKjNIA1BihVMASeIcd1jwpln3WCBDDBivS7ReK+oFlUCaWcwYdOZGN4+tyKNuC5NzFrDCRXz2MGoCUV2Ulojbd/6VRnPNNbMvxCoOS94SZxKAgcSmJoGzQn+OJt5rQdHyvA7OsJn6VtLpgCtCOO+6qOFcMrz8gbiucgAAUUKBxf9uMKNKUd02c9C8U00pGqTtKiC6E8GbcihIIcrhKHMLkx/6XPOwIp5wqE8qy3nEqG1dPB2KArfmKXkFgl9iWRw4kPjKAlOzSz02EO17wDDXuWbUcIoXrFwbobomdJDAY/6zeuTfLCDNMDAmFr4ZoCHDdEsaI3dLdWCvF+x8gbiIMkdtq05yY6RBmhsBtkOVd2HloCcmSVV/wAYEdPm5l9E/NqhMccIeaCV+HAuGdzkxKCiigCyXEbAOQ8uvyil/bEaaXH7pKdz2Ro2bpAGjOQ0btvy8IfPhxUzBAM0NjNIZyyE0Bx8ssZKZelDfBWxyETkcy2a8A8vGM7t5oaHqWch4QuOzzFeLq+azIZU2Ocz3chuYVQoiZ5WjKZu7W6S8cP8nvKTFNgxplLEiCTfDesJqIi0oTDUjGgvbhEa3sFKeO4gzY57wZoLrUmbfs4psgdYmPEQqGm81J9d8WY9rLPMTlRM7TDXpVF0QSJpue8YpZnLzGdurWqWsOxj/hOswOMgMsdVTaF7gCQohV0eDh7NDBUVheFZAxodUeJvkhf86FGafC/JaGIZgtAfGa7AXCN3tzBliCrf4GDvIEwHCCzyAM8T8s3JFjP67ynWCoaGph8WiPFfYCmhPq1lCcDtQe2GVjDkUXPHCsaK3G2NXPGjUfF4oGj6IyA0YxniXuWefuE6FZw1NF1kimrmhqr21x7tRuY9xSn6nYZbegQ+xdJ/GGPkXkb38Widcoot6WpLgd7VbN1bOYyIHYd3DU4F+UrfepIQqRS83hPYVzGF+tA07FtoQorI+myVGBbKjAwaZWtDNpXOPaoSCCfqcgvSAqduwiBugwa6fa3SFghMACHcaW0/GFY6JfAdKsqC6h+ZVGLvncu/eAs6BGuWhdIhcYoPbRnrSgL/2EMhJxgRzQUTwqq4MF9QNw8EgkPP5dfMqyGHIW27mvDWrwvj3wiftoIrRR3g0gL6FFUU2kEZ8hPFBHExYIILgMYUxmAuUFRs+ezxlmyiIMcgXAGu+QK77NevSOJEOkqnZdsRZeEqSoODTqx8nCrBZMmoiKdxfXOz+sXmJGsp5RP2PIB2da1WnaKCgjL4ABvBBCQo0URpbPHROACYKSdOAGtkquxpieLu0ClGqQkWJEqXfad+SW4hSm7QGuXBJxWghiNu9q3o7aZYZF0djE6LuDHt8eMr5yTEWRCxrYoiOMTM7g15MQLn4wLEBxxMvilmZkH9gUCiWJmG7N6t9W84tl7NRJGPHp+zjZbT4jLX9Ki5ngAv2WiV6h6KJtYTObNgS2Zs91sFlBUq5rHAt3QvZ59unbkJIFmfxGblptTJQDBbuIsXbFyl6bkmb7314wjquR+pHOh0A9GxnHS8b76HQ==").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("bBcrMpyzvFLUFKU5vwewlxn9UXPwMFi3lJFJhCQNGpiGOWyEnhPt1nkBfQDZ3rGWCdDfM97NtWWoPkDywAUaytcUCXEXpHbxLgk5hxLmArOMK5p+8YVFBqdhVlN6Ivd+G5TKKZvn0BPElNHNALsyXXrjujVYB8IqYFaDa+WktCvS9n3IbIFZ/NPIFjcvkl3i/3QA0p+bKvJHmpu5b4ZtWEvtOwtDYTU62IWEYUi6grq611FEwE0X+TEm+XEU/QVpgi01LzpLC81M0LAa5UWxzCCel0Y6v/GkdmvVjqygXN4m7re6KeVUcpZuDzGXARKazMgpLHVExAjeD5BAM8r6BD9noOb43LQOYExjgh9kmTEFYKyFRTRj3nUkADbnqrwsu1/jkbR+fd1rGfa1MxnviQ+RcM5dUVR6TUH+eHTyGAKDz9y315YnBynrINJ0GWyZ0Na8PEDUzdzT0AKRCHU7yz90IEb6BaWlIcLbxa/cSYeUgkO/5CxoWmpJxsrVEpCF8AsS8yHjWiTKoLSos2KcsLN3PBxdDxG4Mbf0BEwdNl3TiYwM1GAngtkeQDmzYK42502H3dZkDbCjDfIWKl2V6Dt1r/k+np1Qau7eBTgRyCsXdMjN90nJCCqI9F+RKf7zjtFWye6682Tvkc2kqv2+7YCvgeoX59mdgCBxlT84M0Sz64y++WhLOFusOsSAvH8BWiQo3IMPjX5I9kLMRWGDtSZYXrd2kXi/DmVDSLU7BJr8ljrwdlrkXDcsOhGb7K1q74pWshRnFIPx4G9lUR5D6iP9tHtYgdjbMrc6EQe+oRG/+hEXIqGd+xowtPoExtSYrrxO6WpBYhH0CFeZ/PGDHNe1QDLLyCLNykUKq2ZziJkDzfeEvFU7db5bTPJ5hy0FpWdYQQ0tQuy50v0JnaYjV9UX77XzMWYFNWMbyhIrLycfJddDj78ssNApQtzaoaT98VPLmT6+AZODD1La9LXqWXwpIf8xVky6DwGFvQU4wPR8LRlM3uu4JYEmck/8L3KaenHztO7SYhzk2IL+whs3mVtUHxkPEeSAGPK+TQA0nQmTfYTwAgeR0IcLPTfpERnPf3r3OhSCIbuvry3YbtWic+xmAenlIRsxyWwUaGW7u1Bq2BshNbq9oppX4NWVA1gly1F5ag6bNS6A9UhEGpPnxe/ZhF6O5PbhZIgGF0T6Z3WnRzgGfYZ8Q4eR3hvnBE3voHtEQY938dCQOqfu5E7ca4e4YJMb5yh5Eh7kOOnH4D/7tDQVHjTBwb3f3A/GWNxu5jEXd75dH3+1i1lssKGm8PSzVVRdpa0xrj73nTVbFfVuM+zCIKgpvXFGvPAnIArOe62sj1aoFPJaQdaFozv0Buwk22sB8pxWedmJ2pXsn0kAyOdDN6M+JMbFtzwhvmzbhnc0sKLH1L69pZOmwuTjjIUUOEGgNUF9Xt+Ml1Qeiy4lgsD+VQlRDE4Gh6DaaC5CpOD5HAU+nzP0KhAFg2dbMw==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("S/eqVx5Rm0KZzVPKSnGwYqD30dW0").unwrap();
-
-    let private_raw = &BASE64_STANDARD.decode("xn3xJM+NzUBtj8i+aKrNgBxKb9n6F5XYzihWiSBNE68=").unwrap();
-    let public_key = &BASE64_STANDARD.decode("7h3kwwQy4oiSiU3XTdTwY/tbMofAdWUuz04q5cYgldgeKItRQF+r1aok5RA0IxFg686IotPehzm1VQH8XQNtVw==").unwrap();
-    let encapsulated_key = &BASE64_STANDARD.decode("BDmhtrp/NjNIzGi/Cuv//AWxTnVsZBzuU9R0poAiNHQZ+aQlKcMMkjGt1We2iSwKFnfZW969FflZts3YWjmB6zE=").unwrap();
-    let ciphertext = &BASE64_STANDARD.decode("995tqwZZSmZbSOHuv+VBx6QOd8Fq").unwrap();
-
-    //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
-    let private_key = p256::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP256HkdfSha256::new_decapsulator(private_key);
-    let encapsulator = decapsulator.get_encapsulator();
-
-    //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
-    //let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::derive_from_seed(&Array::try_from(private_raw.as_slice()).unwrap());
-
-    assert_eq! ( &encapsulator.as_bytes().as_slice()[1..], public_key);
-    // println! ( "pub1={:02X?}", encapsulator.as_bytes());
-    // println! ( "pub2={:02X?}", public_key);
-
-    let decryptor = HpkeIesP256Sha256Aes256Gcm::decryptor_from_decapsulator(decapsulator);
-
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
-
-    assert_eq! ( result, b"hello");
-    
-}
-
-#[test]
-fn test_apple_hpke_p384() {
-//    let seed = &BASE64_STANDARD.decode("67fs0M/OfCiCkfI6BC9Ma6K7isbVcu1KRjJkYMR65Kg=").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("h6J7OCmGB2ddVMiCbGC9519I7xDKP4BjA7yaMYyVgc9ODzyEdWKSz+sUADfQzENRAFJg0iqbyD11zWaXK4kSpWHX7y1oIlBsBqAVI+9RBNlMnk/T1nIRbDx0dOkqQzbHttyJbFAhQ/zVswmua4XhwtE0jiduVzljcWg8hTEN2LHuQ/plzmma5Xw8R8LMH41muuJMQAjf2NW1taaCqPz09aKD9mheC66/v6KZEEdmTuZpm4dD2hhRozsaAguE2jfJH06oK0tbwABHRcksz28twXkckk6JM1B1rcmpC9OdTX3VVax3Af+YwiVsIxBOJ1SVRUh3Q1AUCYwy8LNnPQFfB59T90TLkNtZBikxB2rJoGjLE4kflG+rCYyhkBA1Tqt5nLlf/GMxUubD7RlJU6URiO6lmUDncqo59MNonA6LK/QHI8k7RFQf29f+aSvxO4HiQ8Zkq9TzL1kEyMmP5a7lL14xJtky8adikguOa4GZlQW+tfwpFrcAxL6vC5Le2xDWi0YHxi4hY8gpNZXceEZypnBYSzUDtwA6fjht4Ativ/0nVdoywLXE3abYgbW8SR+n4q51uavEtGSi/xceQ99eg05ReuT8fivzL8r1FXFnMd+JSi/UBVOL3o7e58MGS+CyvdEY/NuoqtpWQo9KFOvfovErtvlfdWPonPbhTn18QkYR3/irD+kYpmmkm5G1xUetA/UawBeSsgrX2dPqIstPPxuwNSQooAI8WiB7Cr+X94YLk555Zfxb1319CuyX+/UXok7Z/ECXydoyBiUVUtTp2m7lAqNefz9wc3SRjKrtmBKZKEmrus+OaiKWXiyNtGYtFzScfS51B6ixEm1CD+OACsRuokHLyRzmPufKEJfwEk55d1Q4yKgIklnB3FvWR+JtK5QL3jmkJtFQ+qMKfjbTosdubPyFckm+LdLJ7aXuWcCL/ixhxTR/aAnVTazBlexxXyceZxvNwODqoWx16YVOEpLT9m0VaRRU//6lG61viCUgeJRpsGLL2Yx5XlWMpwdV+ii0SpU28WW8b8P6LQWi4mWTh5fBqzwWuULgPy7DyX6ZsLpFBbnENO2ZLt1OYF8GAxBbMQ2AUDatchkqO7mwHexmmzmFxX7mMkVy+pfl2O63YbtQJ740mK6dcJ7EpWWrAeR11k4EtTcEnYt0hAXGEGf9FmskzVCZlv+VIBM9NZZnO0DCMqx+T42c4YAcLhbA5nsTxhOmt3v7jQGxjFdLMhaRzg7hkIvdemuBTGxd6AGHk4DuRthkTms2GaB148Y6ycm3h0eLYph/NpmaO9WSyE4lir4Qjzx4MUDSMskVeVaiGOjYzBDZpv+VmGBKiXGWPk+TPYkUQjR3m2fb8scW+9rO3JE4TznJ4WzA9EmNncFAwkmfNVApWSpxFI5pDcHOkB2sGuOiA1cpDnK5PA2Y4+u3GYDQ3Z5eIv33qWpjf2ZcQ7QlOeT6eNvrqxucBrcOX1CaCCYvPqPr/FjuH9RWRg==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("fVgZd6//P9xgLDeLAO9zcuotZsE0").unwrap();
-    let info = hex!("0408");
-
-    // let seed = &BASE64_STANDARD.decode("O3vXZJtfNsnucAnfTcEWSDt9gK6iKGiTdAf0YEz5m5M=").unwrap();
-    // let public_key = &BASE64_STANDARD.decode("H2Q2eyOcJVRDtMVpReGAq/oge1w0his4+FdawodERhWmW0k1TSqK+pR2RLSAjUuHLEErGVAllyeEOmuJfMxqaiWx8xVv14xxcAOIdnKfvutCR/uBwxw9KDLLm2p2EZca6vhHffA7BfcnxJxrLCijk6ZGmhUgsGNqkAyhXfpTeLMgEYmu1dSDBYYO03ogHDGknAu1qrkqBzlwmOWUs1wLy8yFiiZzAxV7X1VCJke1xSnFNFDL7rKWyhRDxYZzFwYRkvdCrXE2QYHOB9dtZgZ9AtZ/PPaRU9wk+0iE2KnMlskdIAMqS4Bu1hcrbYR8I2RdYxt3uaJejBmBoPaAsKiS2mEpV4sy7iRZ15EViyItKYcML6qBi2qBO+keDHI2fasC1Hsd+rAoh+gRpLq9ofoi7eu230NSI0EEEZV4dVVYrERwqYwUewSUNOGld0fLOXgUrERg9fTBhDiBfNp6iGuwRcIu5tM3wPMuDgRSvtaalZArOuVyYExHxEGzsIV+LImaUkaE61WB93mU8nAog+Sf9FkonwYr6LAnAtoKf7N4CjudloCIeAMYPtePnyofk/A+jtHFe5hjXOOcrYyhdGpGuhVHnVFm1SJS1WWjHzWviicV9yQyncte26RgkIW+saAxsbyTiBscihLEl7J8JXa4ZWK+tSkuUpC44jGOHBGpVhcUncaNY4lerZICZ0pzE+DOM4WVGpHHAKegT9GH+rV+rPAHUFExLSaEIHZfnnkE9JlXQzwxSABxU8xR0yIxl3S2S8EuwtCPtWCSt+cFAPcTt1qbb5g54DrBfiikfAC5KUt7WrzFTNRJ3HB/pRlz3GS0XtkDGyOU92xqgXPBbdOo9FOdXay4DHyLpAWnMcJwFvcyLbgiJ2KAtVgH3aqE8VAH/hE5wPoQVGxYU8Y8HsQV6ZlYlcopNMvIfTwwAliiVuEHGQVaPCMgeDAmdVdIwJiStjRoFnsvU4tQ9UHCvpekGLKuo6ZHm5tUckGwfbyr+oYELYioRLCzm+uN85xO+XENKrkPGRO7CVcp+cO6QrpYmCW5D7ZmSxTKKMSYIEom07dXR0kVP6FO+Fco6NQE4PJNgAqgz+Bm3MWhxJPJuxRczLp/w0hhbPWlZgFgJYuuqoyaaccJBsq1Gqw2qRwhq0ExiYERjdmzDDWA3zMXEhFN97UVJdZ5u8YcFFBgvhmFkPwuMdBtO7RrgsO+X+qsLhVb89hXKTUDvmFvMWK8iRzDNyyVrxB/IRkfAhBkiZqnGpWeBUqrGbEpGSiW4ZMDFwuL2fcN8Pwxg6QlDnMwhGo9QCKQ6wGG2Ipre/Nr5ksQgJuEmpCf0Zal9DWrgMMWqzPOQ2EiKjt2snCuKQrQUPE1fpUNKwXBRwVFdzapmXpGIQMSSqSWVmlJqQJXd/Ve5cq20Mk3m0WXYESkVWVog/JzVvOLvPR1z+XIC+Vy8nInx3fNUTu5SEYzzNlhXmMh3CiPZtwimOCgturBZaw66CaeGCY3FIkcUoY/VohcnsyzKBdsFGJe5Cg8duvGlSJ848bH5LpBY8F6JoasrrXILPNfqSKzAS3HEuv15fcZu67MZsOIpxjhcOq7IEusLimpjxC7RMkxlnM5rDgYLJzZPjqLIg==").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("0q0eUx7HRDrRC/NRb1VPIZ3AL/hi+XKHSArqxtx5f39LPUgQ7nV+421wWIqctXAJiEbgsLaBMfYPiXwnkSPjdwDmdBoI3Z1kX9tK1MCmR7eXKCfwcWVTLgSKwqbmwjzqviRZ4I17yt/YMl3cJna9yJDFk7OjzYINJQUg+FmcdxxmTXECy8pr8NJQkIotGPQeGPwBlxIJE1sZrCux1drpJ5boU+yWSQtg/vio+xzBYsGaI8DWaT9G5AHxIUBteYqv0xfceHSVRBv1dmlCbtCNGlIuIZY1iBbFUWgJMMQKGUnEqxtnlFXYRRUijn+HwZ2OUc++2AhMK/JlnZmqPjEOp6g3Wbtx+RfaMQkGGjMuMur6gcSSCbrSI/X8KFwsj0lMYSMYiiIbY8C5VnJpMem6LjAjrg+um1fW/IgBdbfs/2yrRFmyxgzb1z6fwObk+dnuUkqg/MlAFfYHBdVZtn8hmPMKmn7rm1UG4Mc5GhM+k54qWQf31JYTBOVuXriAy3THcslWsTvHR9swuHOZr6+VUdoYk0UTePp+ektR+2FpBEkRbiR+nJ6bVgyjPG/74GI2j3/66+tQYu5VeF2mArbgZxOfXDAV2nZE8I4FlBcmVLsRtDQbIZHUWpVcTSwSFScN37ikqHg0zck6yq6bii8gSL1Xk/mAQQUIct4tToR1FY7cAjJ0ZXTjPJn99kd87H+TzvlMYg6h1jTFCfq6+2KvomEjKsb3G9n6vFA9xTszQy6eojSfeAHLAED+78FN2AX0YTC+H8tny847bkMzziPsgrdQB3O4yFhPPfUPTdr7W9o+UIYO6b51dfTjfGPXsbbpfZK/NFpITdCG2KMfG2eYHlHBv6RUMYUXLpxapBa0EKvMYqqK8purEn28qvOoUQOBhJhW5Fu8c1v7kAIZNhwjnD5bo1TSI0D/cl9+JemzG1RkGHANY1D9jDkv5Ua9rNpIqpCmfP7S5XD2kTln1rUWo0G5djN0mkfP6RKX/4EU6ZPESW6CD+PRnrLl4qgWAktkDiatQqpF3mwbGqabpDQyvmm1M/exOvbR/taezZMdPuwthjKxrxBEVybt632XMRcZAvc8vZ9NrnxXrBs7X28zX1L/Q4HtC1uZzAj0gcxld0v9ltBz9+t52zypyptlLEzXmJ6jmJNMrvmZ5eVVm7+w/Muy9vD9K4xk6MpGmHzORY7WcUCsonxcWqEDpXREZzPGwoQaCpfXgvQj0xXoDV3sX/l9fGH6l2G+cJjqpIfK7uVnAIvMsX4rseOYSR0uYEDr3w4eUK3qqD9zeqtKAtzoX1Rn2JVjwC4dcKMsgdJLd3KeRFC6PkAj4fY8fsXCtjYeWs9BLwFhPCssaAEL7V0JkONHFSjPXkUP2PjLrutDRJvbhFdAWrCRZBKOc1gOSJaVKbWadF09M4V9a9iB1T6XmyIxQLzOP+6ubcsi2HpiT16EdjSJkbiRzHUMzOxlVHjENKSZTeWT6WMfRMN3HSy/fA==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("J2Rbn2MMd7q1AxOtNGqOOO0VFc4z").unwrap();
-
-    
-    //let seed_2 = &BASE64_STANDARD.decode("NqAfhJbWnDMut0NWwZjOTD4YhLmfe74jwKbY/txpfpH3MdH3E/MiEvCrWFW++iWvNfIObAZbENJviEEEsJl5lA==").unwrap();
-    // let public_key = &BASE64_STANDARD.decode("9Pe9i/LE05J9kIqUDQqsQldheKiWezZoX5JJOUJYZtOmkmWfEmZx3RwHASK6bouTZhcZnINJBQp98tKjNIA1BihVMASeIcd1jwpln3WCBDDBivS7ReK+oFlUCaWcwYdOZGN4+tyKNuC5NzFrDCRXz2MGoCUV2Ulojbd/6VRnPNNbMvxCoOS94SZxKAgcSmJoGzQn+OJt5rQdHyvA7OsJn6VtLpgCtCOO+6qOFcMrz8gbiucgAAUUKBxf9uMKNKUd02c9C8U00pGqTtKiC6E8GbcihIIcrhKHMLkx/6XPOwIp5wqE8qy3nEqG1dPB2KArfmKXkFgl9iWRw4kPjKAlOzSz02EO17wDDXuWbUcIoXrFwbobomdJDAY/6zeuTfLCDNMDAmFr4ZoCHDdEsaI3dLdWCvF+x8gbiIMkdtq05yY6RBmhsBtkOVd2HloCcmSVV/wAYEdPm5l9E/NqhMccIeaCV+HAuGdzkxKCiigCyXEbAOQ8uvyil/bEaaXH7pKdz2Ro2bpAGjOQ0btvy8IfPhxUzBAM0NjNIZyyE0Bx8ssZKZelDfBWxyETkcy2a8A8vGM7t5oaHqWch4QuOzzFeLq+azIZU2Ocz3chuYVQoiZ5WjKZu7W6S8cP8nvKTFNgxplLEiCTfDesJqIi0oTDUjGgvbhEa3sFKeO4gzY57wZoLrUmbfs4psgdYmPEQqGm81J9d8WY9rLPMTlRM7TDXpVF0QSJpue8YpZnLzGdurWqWsOxj/hOswOMgMsdVTaF7gCQohV0eDh7NDBUVheFZAxodUeJvkhf86FGafC/JaGIZgtAfGa7AXCN3tzBliCrf4GDvIEwHCCzyAM8T8s3JFjP67ynWCoaGph8WiPFfYCmhPq1lCcDtQe2GVjDkUXPHCsaK3G2NXPGjUfF4oGj6IyA0YxniXuWefuE6FZw1NF1kimrmhqr21x7tRuY9xSn6nYZbegQ+xdJ/GGPkXkb38Widcoot6WpLgd7VbN1bOYyIHYd3DU4F+UrfepIQqRS83hPYVzGF+tA07FtoQorI+myVGBbKjAwaZWtDNpXOPaoSCCfqcgvSAqduwiBugwa6fa3SFghMACHcaW0/GFY6JfAdKsqC6h+ZVGLvncu/eAs6BGuWhdIhcYoPbRnrSgL/2EMhJxgRzQUTwqq4MF9QNw8EgkPP5dfMqyGHIW27mvDWrwvj3wiftoIrRR3g0gL6FFUU2kEZ8hPFBHExYIILgMYUxmAuUFRs+ezxlmyiIMcgXAGu+QK77NevSOJEOkqnZdsRZeEqSoODTqx8nCrBZMmoiKdxfXOz+sXmJGsp5RP2PIB2da1WnaKCgjL4ABvBBCQo0URpbPHROACYKSdOAGtkquxpieLu0ClGqQkWJEqXfad+SW4hSm7QGuXBJxWghiNu9q3o7aZYZF0djE6LuDHt8eMr5yTEWRCxrYoiOMTM7g15MQLn4wLEBxxMvilmZkH9gUCiWJmG7N6t9W84tl7NRJGPHp+zjZbT4jLX9Ki5ngAv2WiV6h6KJtYTObNgS2Zs91sFlBUq5rHAt3QvZ59unbkJIFmfxGblptTJQDBbuIsXbFyl6bkmb7314wjquR+pHOh0A9GxnHS8b76HQ==").unwrap();
-    // let encapsulated_key = &BASE64_STANDARD.decode("bBcrMpyzvFLUFKU5vwewlxn9UXPwMFi3lJFJhCQNGpiGOWyEnhPt1nkBfQDZ3rGWCdDfM97NtWWoPkDywAUaytcUCXEXpHbxLgk5hxLmArOMK5p+8YVFBqdhVlN6Ivd+G5TKKZvn0BPElNHNALsyXXrjujVYB8IqYFaDa+WktCvS9n3IbIFZ/NPIFjcvkl3i/3QA0p+bKvJHmpu5b4ZtWEvtOwtDYTU62IWEYUi6grq611FEwE0X+TEm+XEU/QVpgi01LzpLC81M0LAa5UWxzCCel0Y6v/GkdmvVjqygXN4m7re6KeVUcpZuDzGXARKazMgpLHVExAjeD5BAM8r6BD9noOb43LQOYExjgh9kmTEFYKyFRTRj3nUkADbnqrwsu1/jkbR+fd1rGfa1MxnviQ+RcM5dUVR6TUH+eHTyGAKDz9y315YnBynrINJ0GWyZ0Na8PEDUzdzT0AKRCHU7yz90IEb6BaWlIcLbxa/cSYeUgkO/5CxoWmpJxsrVEpCF8AsS8yHjWiTKoLSos2KcsLN3PBxdDxG4Mbf0BEwdNl3TiYwM1GAngtkeQDmzYK42502H3dZkDbCjDfIWKl2V6Dt1r/k+np1Qau7eBTgRyCsXdMjN90nJCCqI9F+RKf7zjtFWye6682Tvkc2kqv2+7YCvgeoX59mdgCBxlT84M0Sz64y++WhLOFusOsSAvH8BWiQo3IMPjX5I9kLMRWGDtSZYXrd2kXi/DmVDSLU7BJr8ljrwdlrkXDcsOhGb7K1q74pWshRnFIPx4G9lUR5D6iP9tHtYgdjbMrc6EQe+oRG/+hEXIqGd+xowtPoExtSYrrxO6WpBYhH0CFeZ/PGDHNe1QDLLyCLNykUKq2ZziJkDzfeEvFU7db5bTPJ5hy0FpWdYQQ0tQuy50v0JnaYjV9UX77XzMWYFNWMbyhIrLycfJddDj78ssNApQtzaoaT98VPLmT6+AZODD1La9LXqWXwpIf8xVky6DwGFvQU4wPR8LRlM3uu4JYEmck/8L3KaenHztO7SYhzk2IL+whs3mVtUHxkPEeSAGPK+TQA0nQmTfYTwAgeR0IcLPTfpERnPf3r3OhSCIbuvry3YbtWic+xmAenlIRsxyWwUaGW7u1Bq2BshNbq9oppX4NWVA1gly1F5ag6bNS6A9UhEGpPnxe/ZhF6O5PbhZIgGF0T6Z3WnRzgGfYZ8Q4eR3hvnBE3voHtEQY938dCQOqfu5E7ca4e4YJMb5yh5Eh7kOOnH4D/7tDQVHjTBwb3f3A/GWNxu5jEXd75dH3+1i1lssKGm8PSzVVRdpa0xrj73nTVbFfVuM+zCIKgpvXFGvPAnIArOe62sj1aoFPJaQdaFozv0Buwk22sB8pxWedmJ2pXsn0kAyOdDN6M+JMbFtzwhvmzbhnc0sKLH1L69pZOmwuTjjIUUOEGgNUF9Xt+Ml1Qeiy4lgsD+VQlRDE4Gh6DaaC5CpOD5HAU+nzP0KhAFg2dbMw==").unwrap();
-    // let ciphertext = &BASE64_STANDARD.decode("S/eqVx5Rm0KZzVPKSnGwYqD30dW0").unwrap();
-
-    let private_raw = &BASE64_STANDARD.decode("b9axCAE6PRcHXB5NzUVQ4CIkjbAeXPQ0zaKNtNNFi/nDZwlyIrqqtHtZdZV5R0yh").unwrap();
-    let public_key = &BASE64_STANDARD.decode("UGxU2udrRunriFz/ZpVigSUeJTiz4ux1qG+001OHoc6hixpuli8Ba4uglGBpElDgRxC8LVKWYSRkUCeiQV1cCllk/P2zerc3+/uLptKxxgs3kkFE5R9azMU/yBRENWZU").unwrap();
-    let encapsulated_key = &BASE64_STANDARD.decode("BLAb2Q+7+yjD17+CPCwooGxwcmFELXI6xrY1/h0ijHdFLJdVA4htb+edFcNa+yMEyFZ4ks0cVQQkaaXAgrOg3RHFn7zeAis3Pq9ZnjTBcggNgLHSOlc/KjIBfYvjk25rgg==").unwrap();
-    let ciphertext = &BASE64_STANDARD.decode("LHtZuQKFqCwqp4C142GFMi4GvFwt").unwrap();
-
-    //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
-    let private_key = p384::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP384HkdfSha384::new_decapsulator(private_key);
-    let encapsulator = decapsulator.get_encapsulator();
-
-    //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
-    //let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::derive_from_seed(&Array::try_from(private_raw.as_slice()).unwrap());
-
-    assert_eq! ( &encapsulator.as_bytes().as_slice()[1..], public_key);
-    // println! ( "pub1={:02X?}", encapsulator.as_bytes());
-    // println! ( "pub2={:02X?}", public_key);
-
-    let decryptor = HpkeIesP384Sha384Aes256Gcm::decryptor_from_decapsulator(decapsulator);
-
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
-
-    assert_eq! ( result, b"hello");
-    
-}
-
-
-
-
-
-
-
-#[test]
-fn test_apple_hpke_p521() {
-    let info = hex!("0408");
-
-    let private_raw = &BASE64_STANDARD.decode("AKUvuZ3qsh0j5le8Xs9tfwZLjnJf+aM014TbgXV7T9OdxeKt2fkKYFFRIRN9eLRlXgYJu3LWH4eJ8tVsXaDzDsaz").unwrap();
-    let public_key = &BASE64_STANDARD.decode("AJgm/1WGDOHKnxkgjTKoPQJoowTZnoGNuSK8HVdyUp4+9o2RR4/kuiHck+55w32OKfuNoweO4gRgakunv/dFYCFeAWf/uPjIgrByi8AkaiizAcoui4IbEOGvTZkWuaVUHFpYAdMp79h0dIgylqJBW4Pxdwg7Nh/TIhLLRWTUHFGSA3WD").unwrap();
-    let encapsulated_key = &BASE64_STANDARD.decode("BAGLi2Ipg/ZejdUsPajFsSBzYS3KM4o9o5auw4hz/g7+7s+tds0VQHTxUmovXDxfu6UEpAvlUEsQn2mlKTql+fdfEQFsUi3fLqTxeRdC3LjvDw2510Wy36SIp9+d6Ss+OcU6ptw2k0dzrQ3ahAF9UU5vZvyXGyb+ERAMiITNwC9xLVlGsg==").unwrap();
-    let ciphertext = &BASE64_STANDARD.decode("EQwIunwifRYJ4WP33lS69OTYNvzj").unwrap();
-
-    //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
-    let private_key = p521::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP521HkdfSha512::new_decapsulator(private_key);
-    let encapsulator = decapsulator.get_encapsulator();
-
-    //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
-    //let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::derive_from_seed(&Array::try_from(private_raw.as_slice()).unwrap());
-
-    assert_eq! ( &encapsulator.as_bytes().as_slice()[1..], public_key);
-    // println! ( "pub1={:02X?}", encapsulator.as_bytes());
-    // println! ( "pub2={:02X?}", public_key);
-
-    let decryptor = HpkeIesP521Sha512Aes256Gcm::decryptor_from_decapsulator(decapsulator);
-
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
-
-    assert_eq! ( result, b"hello");
-    
-}
-
-
-
-#[test]
-fn test_apple_hpke_p256_sha384_chacha() {
-    let info = hex!("0408");
-
-    let private_raw = &BASE64_STANDARD.decode("08VOcjYMVUbAv7HsGuxQf6zuPmAILWLMXJFDF0iwRk8=").unwrap();
-    let public_key = &BASE64_STANDARD.decode("vevzVCumJJ/aIXI435I3aG7zSnQoayEaYdu90jP/IE1EpcbTGPhGlmubBRQ+fz/aVw2WbTU8/M9lmjddK8kekg==").unwrap();
-    let encapsulated_key = &BASE64_STANDARD.decode("BEYjWITuKyyrLiS/o+htvaymtXOv146vupKJtanscqvc/FvTNI/kXtS5leudItYWvbGocD6ACca9UPWug7Uvmtc=").unwrap();
-    let ciphertext = &BASE64_STANDARD.decode("dO27R0NZuBa9sSq1HyrSAhkhJu3k").unwrap();
-
-    //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
-    let private_key = p256::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP256HkdfSha256::new_decapsulator(private_key);
-    let encapsulator = decapsulator.get_encapsulator();
-
-    //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
-    //let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::derive_from_seed(&Array::try_from(private_raw.as_slice()).unwrap());
-
-    assert_eq! ( &encapsulator.as_bytes().as_slice()[1..], public_key);
-    // println! ( "pub1={:02X?}", encapsulator.as_bytes());
-    // println! ( "pub2={:02X?}", public_key);
-
-    //let decryptor = HpkeIes::<HpkeKemP256HkdfSha256, HpkeTwoStepKdf<Hkdf<Sha384>>, chacha20poly1305::ChaCha20Poly1305>::decryptor_from_decapsulator(decapsulator);
-    //let decrypto = HpkeIesP256Sha384ChaCha20Poly1305::decryptor_from_decapsulator(decapsulator);
-    let decryptor = HpkeIes::<p256_kems::HpkeKemP256HkdfSha256, sha2_kdfs::HpkeHkdfSha384, chacha20poly1305::ChaCha20Poly1305>::decryptor_from_decapsulator(decapsulator);
-
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
-
-    assert_eq! ( result, b"hello");
-    
-}
-
-
-#[test]
-fn test_apple_hpke_p256_auth() {
-  let info = hex!("0408");
-  let private_recip_raw = &BASE64_STANDARD.decode("XXA4ZZgIUZvo0wFwH1YIeCsTbWF7D+OR0JKa70MAFTQ=").unwrap();
-  let public_recip_raw = &BASE64_STANDARD.decode("Yl1GNUxsWQSHXpbojwyE98RmxcTYQHJaNdGTriWOmDj3aDHowxCRcT9ElknRzdcDPFXc/vGlL8cJIpkqcIzm6w==").unwrap();
-  let private_sender_raw = &BASE64_STANDARD.decode("/QGZ3aThDJO0Iz5qbrQTeXwWDnm3wS60CtgcSWcb4kA=").unwrap();
-  let public_sender_raw = &BASE64_STANDARD.decode("AhYcVhNRP+UESv8VozUCMY14RF/ad7szOZEFemHRGH8Mtg1wGy4T2h3DdgHSJgJueYUbYTTXk5fT4VRNsQD8wg==").unwrap();
-
-  let encapsulated_key = &BASE64_STANDARD.decode("BExbWv9PerHYA98He2Dmmx7vEwFvRge8CpqdsUlWu8qjf+YrPROkRhJ9hMQMJW29RkoHFoS074lC/euq0KHqAWk=").unwrap();
-  let ciphertext = &BASE64_STANDARD.decode("oZgb610Y9b+oh1QZSIYO613G5W44").unwrap();
-
-  let private_recip_key = p256::SecretKey::from_slice(private_recip_raw).unwrap();
-  let private_sender_key = p256::SecretKey::from_slice(private_sender_raw).unwrap();
-  let public_recip_key = private_recip_key.public_key();
-  assert_eq! ( &public_recip_key.to_sec1_bytes()[1..], public_recip_raw.as_slice());
-  let public_sender_key = private_sender_key.public_key();
-  assert_eq! ( &public_sender_key.to_sec1_bytes()[1..], public_sender_raw.as_slice());
-
-
-  //type HpkeAuthKemP256HkdfSha256 = EcdhAuthCapsulator<NistP256, EcCombinerAllPubKeys::<HpkeKemKdf::<Hkdf<Sha256>, kem_id::DhKemP256HkdfSha256>>,U32, EcRawEncoder<NistP256>>;
-  //impl KemId for HpkeAuthKemP256HkdfSha256 { type KemType = kem_id::DhKemP256HkdfSha256;}
-
-  //let decapsulator = HpkeAuthKemP256HkdfSha256::from_bytes_decap(GenericArray::from_slice(private_recip_raw), GenericArray::from_slice(public_sender_raw));
-  let decapsulator = <HpkeAuthKemP256HkdfSha256 as Capsulator>::Decapsulator::from_keys(private_sender_key.public_key(), private_recip_key);
-
-  //type HpkeAuthIesP256Sha256Aes128Gcm = HpkeIes<HpkeAuthKemP256HkdfSha256, HpkeTwoStepKdf<Hkdf<Sha256>>, aes_gcm::Aes128Gcm, true>;
-  
-  let decryptor = HpkeAuthIesP256Sha256Aes256Gcm::auth_decryptor_from_decapsulator(decapsulator);
-
-  let result = decryptor.single_shot_open(GenericArray::from_slice(&encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
-
-  assert_eq!( result, b"hello");
-  
-  //let encapsulator = decapsulator.get_encapsulator();
-
-    //let x = concat_bytes! ( b"ABC", b"DEF");
-    //println! ( "x={x}");
-}

@@ -14,6 +14,9 @@ use serde_with::{serde_as, base64::{Base64, UrlSafe}};
 
 use josekit::jwe::JweHeader;
 
+use hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128;
+
+
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 struct JwkEc {
@@ -202,7 +205,6 @@ fn test_draft_ietf_jose_hpke_encrypt_key_encryption  ()
 #[cfg(all(feature = "rustcrypto-p256", feature="rustcrypto-aes"))]
 fn test_draft_ietf_jose_hpke_encrypt_key_encryption_2  ()
 {
-    use hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128;
 
     let jtk = r#"
     {
