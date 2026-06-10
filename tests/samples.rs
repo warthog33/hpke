@@ -56,7 +56,7 @@ fn openssl_encap_p256 () {
     
     //let c0_recv =  ::kems::eckem::EcEncapKey::<NistP256,U32,EcUncompressedEncoder<NistP256>>::from_bytes(GenericArray::from_slice(&encapped_key)).unwrap();
     //let decapsulator = ::kems::eckem::EcdhDecapsulatorUncompressed::<p256::NistP256,HpkeEcCombinerP256HkdfSha256, U32>::from_key(recipient_secret_key);
-    let decapsulator = KemWithKdf::<kems::eckem::EcdhKemUncompressed::<p256::NistP256, SeedAsScalar>, CombinerAllPubKeys, KdfForKemUsingHkdf::<sha2::Sha256, hpke::kem_id::DhKemP256HkdfSha256>, U32>::new_decapsulator(recipient_secret_key);
+    let decapsulator = KemWithKdf::<kems::eckem::EcdhKemUncompressed::<p256::NistP256, SeedAsScalar>, CombinerAllPubKeys, KdfForKemUsingHkdf::<sha2::Sha256, hpke::kem_id::DhKemP256HkdfSha256>, U32>::from_private_key(recipient_secret_key);
 
     let k_recv = decapsulator.decapsulate(encapped_key.as_slice().try_into().unwrap()).unwrap();
 
@@ -85,7 +85,7 @@ fn openssl_encap_x25519 ()
     
 
     //let decapsulator = ::kems::x25519kem::X25519Decapsulator::<HpkeCombinerX25519HkdfSha256>::from_key(recipient_secret_key);
-    let decapsulator = KemWithKdf::<kems::x25519kem::X25519Capsulator::<SeedAsScalar>, CombinerAllPubKeys, KdfForKemUsingHkdf::<sha2::Sha256, hpke::kem_id::DhKemX25519HkdfSha256>, U32>::new_decapsulator(recipient_secret_key);
+    let decapsulator = KemWithKdf::<kems::x25519kem::X25519Capsulator::<SeedAsScalar>, CombinerAllPubKeys, KdfForKemUsingHkdf::<sha2::Sha256, hpke::kem_id::DhKemX25519HkdfSha256>, U32>::from_private_key(recipient_secret_key);
     let k_recv: Array<u8, U32> = decapsulator.decapsulate(&encapped_key.into()).unwrap();
 
     assert! ( k_recv == key);
@@ -119,7 +119,7 @@ fn test_apple_hpke_x25519() {
 
     let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
     let private_key = x25519_dalek::StaticSecret::from(private_array);
-    let decapsulator = HpkeKemX25519HkdfSha256::new_decapsulator(private_key);
+    let decapsulator = HpkeKemX25519HkdfSha256::from_private_key(private_key);
     let encapsulator = decapsulator.get_encapsulator();
 
     //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
@@ -163,7 +163,7 @@ fn test_apple_hpke_p256() {
 
     //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
     let private_key = p256::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP256HkdfSha256::new_decapsulator(private_key);
+    let decapsulator = HpkeKemP256HkdfSha256::from_private_key(private_key);
     let encapsulator = decapsulator.get_encapsulator();
 
     //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
@@ -206,7 +206,7 @@ fn test_apple_hpke_p384() {
 
     //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
     let private_key = p384::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP384HkdfSha384::new_decapsulator(private_key);
+    let decapsulator = HpkeKemP384HkdfSha384::from_private_key(private_key);
     let encapsulator = decapsulator.get_encapsulator();
 
     //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
@@ -241,7 +241,7 @@ fn test_apple_hpke_p521() {
 
     //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
     let private_key = p521::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP521HkdfSha512::new_decapsulator(private_key);
+    let decapsulator = HpkeKemP521HkdfSha512::from_private_key(private_key);
     let encapsulator = decapsulator.get_encapsulator();
 
     //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
@@ -272,7 +272,7 @@ fn test_apple_hpke_p256_sha384_chacha() {
 
     //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
     let private_key = p256::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP256HkdfSha256::new_decapsulator(private_key);
+    let decapsulator = HpkeKemP256HkdfSha256::from_private_key(private_key);
     let encapsulator = decapsulator.get_encapsulator();
 
     //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
