@@ -23,16 +23,18 @@
 //! assert! ( plaintext_receive == plaintext );
 //! ```
 
+use std::array::TryFromSliceError;
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
 
 use aead::array::typenum::{Diff, Sum};
-use aead::{Aead, KeyInit, Payload, Nonce};
-use elliptic_curve::{PublicKey, SecretKey, Curve, CurveArithmetic, NonZeroScalar, FieldBytesEncoding};
+use aead::{Aead, KeyInit, KeySizeUser, Nonce, Payload};
+use elliptic_curve::bigint::Encoding;
+use elliptic_curve::{SecretKey, Curve, CurveArithmetic, NonZeroScalar};
 use hpke_kdf::{HpkeKdf, Psk}; 
 use kdfs::{Kdf, KdfFixed, Label, TwoStepKdf};
 use kdfs::hybrid_array::{Array, ArraySize};
-use kems::{Capsulator, Ciphertext, CryptoRngCore, Decapsulate, DeriveKeyPairFromSeed, Encapsulate, EncapsulateDeterministic2, EncodedSizeUser2, FromKey, FromKeys, GenerateCapsulatorFromSeed};
+use kems::{Capsulator, Ciphertext, CryptoRngCore, Decapsulate, GenerateDeterministic2, Encapsulate, EncapsulateDeterministic2, FromKey, FromKeys, GenerateDeterministic3};
 use kems::generic_array::GenericArray;
 use kems::generic_array::typenum::{Unsigned};
 
@@ -295,7 +297,6 @@ pub struct HpkeIes <C, K, A: Aead + KeyInit>
 impl <C, K, A> HpkeIes<C, K, A> 
 where A: Aead + KeyInit,
     C: Capsulator,
-    //GKDF: Kdf,
 {
     /// Create a new decryptor using a passed in key decapsulator
     pub fn decryptor_from_decapsulator (decapsulator: C::Decapsulator) -> HpkeDecryptor<C, K, A>
@@ -311,12 +312,19 @@ where A: Aead + KeyInit,
     }
 
     /// Create a new decryptor from a byte representation of a key
-    pub fn decryptor_from_bytes ( private_bytes: &GenericArray<u8, <C::Decapsulator as EncodedSizeUser2>::EncodedSize>) -> HpkeDecryptor<C, K, A>
-    where <C as Capsulator>::Decapsulator: EncodedSizeUser2,
+    pub fn decryptor_from_bytes ( private_bytes: &Array<u8, <C::Decapsulator as KeySizeUser>::KeySize>) -> HpkeDecryptor<C, K, A>
+    where C::Decapsulator: KeySizeUser + KeyInit,
     {
-        Self::decryptor_from_decapsulator(C::Decapsulator::from_bytes(private_bytes))
+        Self::decryptor_from_decapsulator(C::Decapsulator::new(private_bytes))
     }
     
+    // / Create a new decryptor from a byte representation of a key
+    pub fn decryptor_from_slice ( private_bytes: &[u8]) -> Result<HpkeDecryptor<C, K, A>, TryFromSliceError>
+    where C::Decapsulator: for<'a> TryFrom<&'a [u8], Error=TryFromSliceError>,
+    {
+        Ok(Self::decryptor_from_decapsulator(private_bytes.try_into()?))
+    }
+
     /// Create a new encryptor from a key encapsulator
     pub fn encryptor_from_encapsulator (encapsulator: C::Encapsulator) -> HpkeEncryptor<C, K, A>
     {
@@ -331,12 +339,19 @@ where A: Aead + KeyInit,
     }
 
     /// Create a new encryptor for a byte array representing a public key
-    pub fn encryptor_from_bytes ( public_bytes: &GenericArray<u8, <C::Encapsulator as EncodedSizeUser2>::EncodedSize>) -> HpkeEncryptor<C, K, A, >
-    where <C as Capsulator>::Encapsulator: EncodedSizeUser2,
+    pub fn encryptor_from_bytes ( public_bytes: &Array<u8, <C::Encapsulator as KeySizeUser>::KeySize>) -> HpkeEncryptor<C, K, A, >
+    where <C as Capsulator>::Encapsulator: KeySizeUser + KeyInit,
     {
-        Self::encryptor_from_encapsulator(C::Encapsulator::from_bytes(public_bytes))
+        Self::encryptor_from_encapsulator(C::Encapsulator::new(public_bytes))
     }
-    
+
+    pub fn encryptor_from_slice ( public_bytes: &[u8]) -> HpkeEncryptor<C, K, A, >
+    where <C as Capsulator>::Encapsulator: for<'a> TryFrom<&'a [u8]>,
+    {
+        let Ok(encapsulator) = C::Encapsulator::try_from(public_bytes) else { panic! ( "UNhandled")};
+        Self::encryptor_from_encapsulator(encapsulator)
+    }
+
     /// Create a new authenticated encryptor from a key encapsulator    
     pub fn auth_encryptor_from_encapsulator (encapsulator: C::Encapsulator) -> HpkeEncryptor<C, K, A>
     {
@@ -370,17 +385,17 @@ where A: Aead + KeyInit,
     pub fn generate ( rng: &mut impl CryptoRngCore )  -> ( HpkeEncryptor<C, K, A>, HpkeDecryptor<C, K, A>)
     where C: Capsulator
     {
-        let (encapsulator, decapsulator) = C::generate(rng);
+        let (encapsulator, decapsulator) = C::generate_from_rng(rng);
         (Self::encryptor_from_encapsulator(encapsulator), Self::decryptor_from_decapsulator(decapsulator))
     }
 
     // Derive a new encryptor and decryptor from a seed value
     pub fn derive_pair_from_seed ( seed: &[u8] ) -> Result<( HpkeEncryptor<C, K, A>, HpkeDecryptor<C, K, A>), ()>
-    where C: GenerateCapsulatorFromSeed + KemId,
-        //GKDF: Default
+    where C: GenerateDeterministic3, //<Public=Self::Encryptor, Private=Self::Decryptor> + KemId,
+        C: Capsulator<Encapsulator=<C as GenerateDeterministic3>::Public, Decapsulator=<C as GenerateDeterministic3>::Private>,
     {
         let Ok(seed_as_array) = Array::try_from(seed) else { return Err(())};
-        let (encapsulator, decapsulator) = C::derive_from_seed(&seed_as_array);
+        let (encapsulator, decapsulator) = C::generate_deterministic(&seed_as_array).map_err(|_|())?;
         Ok((Self::encryptor_from_encapsulator(encapsulator), Self::decryptor_from_decapsulator(decapsulator)))
     }
 }
@@ -700,7 +715,7 @@ where A: Aead + KeyInit + AeadId,
 /// 
 pub struct HpkeEcKeyGen<K> (PhantomData<K>);
 
-impl<K, C> DeriveKeyPairFromSeed<SecretKey<C>> for HpkeEcKeyGen<K>
+impl<K, C> GenerateDeterministic2<SecretKey<C>> for HpkeEcKeyGen<K>
 where 
     K: TwoStepKdf, //H: KeyInit + Clone + FixedOutputReset + Mac,
     //K::Extract: KdfLabelled + KdfFixed,
@@ -709,14 +724,17 @@ where
     C::FieldBytesSize: ArraySize
 {
     type SeedSize = C::FieldBytesSize;
-    type PublicKey = PublicKey<C>;
+    //type PublicKey = PublicKey<C>;
+    //type Private = SecretKey<C>;
     type Error = ();
 
-    fn derive_keypair_from_seed( ikm: &[u8]) -> Result<(SecretKey<C>, PublicKey<C>), Self::Error> {
+    //fn generate_deterministic2( ikm: &[u8]) -> Result<(SecretKey<C>, PublicKey<C>), Self::Error> {
+    fn generate_deterministic2( ikm: &[u8]) -> Result<SecretKey<C>, Self::Error> {
       
         if ikm.len() != Self::SeedSize::USIZE { return Err(())}
         let dkp_prk: Array<u8, <K::Extract as KdfFixed>::OutputSize> = K::Extract::derive_secret_other(ikm, &[]).map_err(|_|())?;
-        let bitmask = C::ORDER.encode_field_bytes()[0];
+        let order_as_bytes = C::ORDER.to_be_bytes();
+        let bitmask = if order_as_bytes.as_ref().len() == 72 { order_as_bytes.as_ref()[6] } else { order_as_bytes.as_ref()[0] }; //C::ORDER.encode_field_bytes()[0];
 
         let expand_kdf = K::Expand::default(); //new_with_label::<LabelKeyGenCandidate>();
         for counter in 0u8..255 {
@@ -726,7 +744,9 @@ where
                 bytes[0] = bytes[0] & bitmask;
 
                 if let Some(sk) = Option::<NonZeroScalar::<C>>::from(NonZeroScalar::<C>::from_repr(bytes)) {
-                    return Ok((SecretKey::from(sk), PublicKey::from_secret_scalar(&sk)))
+                    //return Ok((SecretKey::from(sk), PublicKey::from_secret_scalar(&sk)))
+                    return Ok(SecretKey::from(sk))
+
                 }
             }
         }

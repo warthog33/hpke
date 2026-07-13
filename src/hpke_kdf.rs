@@ -14,7 +14,7 @@ use aead::array::typenum::{Diff, Sum, Unsigned};
 use kdfs::{GetExpand, GetExtract, InitSalt, Kdf, KdfFixed, TwoStepKdf, Label};
 use kdfs::hybrid_array::{Array, ArraySize};
 use kdfs::iso11770_6::{Kpf1, Ktf1, Tkdf};
-use kems::DeriveKeyPairFromSeed;
+use kems::GenerateDeterministic2;
 
 /// Kdf used in the KEM from RFC9180
 /// It is a version of the ExtractExpand KDF with a given label/suite_id. 
@@ -833,17 +833,19 @@ where
 
 pub struct KeyGenKdfWrapper<G, K> (PhantomData<K>, PhantomData<G>);
 
-impl<G,K,SK> DeriveKeyPairFromSeed<SK> for KeyGenKdfWrapper<G,K>
-where G: DeriveKeyPairFromSeed<SK, Error=()>,
+impl<G,K,SK> GenerateDeterministic2<SK> for KeyGenKdfWrapper<G,K>
+where G: GenerateDeterministic2<SK>,
     K: Kdf + Default,
 {
     type SeedSize = G::SeedSize;
-    type PublicKey = G::PublicKey;
+    //type PublicKey = G::PublicKey;
+    //type Private = SK;
     type Error = ();
 
-    fn derive_keypair_from_seed( seed: &[u8]) -> Result<(SK, Self::PublicKey), Self::Error> {
+    //fn generate_deterministic2( seed: &[u8]) -> Result<(SK, Self::PublicKey), Self::Error> {
+    fn generate_deterministic2( seed: &[u8]) -> Result<SK, Self::Error> {
         let whitened_seed: Array<u8, G::SeedSize> = K::derive_secret_other ( seed, &[]).map_err(|_|())?;
-        G::derive_keypair_from_seed(&whitened_seed)
+        G::generate_deterministic2(&whitened_seed).map_err(|_|())
     }
 }
 

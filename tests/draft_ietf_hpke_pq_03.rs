@@ -2,14 +2,16 @@
 // Test vectors from draft-ietf-hpke-pq-03
 
 use aead::Payload;
+use elliptic_curve::common::KeyExport;
 use hex_literal::hex;
 use hpke::{kem_id};
 use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768Sha256Aes128Gcm, HpkeIesMlKem1024Sha384Aes256Gcm, HpkeIesMlKem768P256Shake256Aes128Gcm, HpkeIesMlKem1024P384Shake256Aes256Gcm};
 use kdfs::{Kdf};
 use kdfs::hybrid_array::Array;
-use kems::{GenerateCapsulatorFromSeed, EncodedSizeUser2, EncodeSeed, Decapsulate};
+use kems::{GenerateDeterministic3, Decapsulate};
 use kems::xwing::XwingMlKem768X25519;
 use kems::generic_array::{GenericArray, typenum::consts::U32};
+use kems::GetRecipientPublicKeyBytes;
 
 
 #[allow(non_snake_case)]
@@ -105,8 +107,8 @@ fn a_1_1_v3()
                    70428f1c9ed");
 
     let (encryptor, decryptor) = HpkeIesMlKem768Sha256Aes128Gcm::derive_pair_from_seed(&ikmR).unwrap();
-    assert_eq! ( decryptor.get_decapsulator().as_bytes().as_slice(), skRm.as_slice());
-    assert_eq! ( encryptor.get_encapsulator().as_bytes().as_slice(), pkRm.as_slice());
+    assert_eq! ( decryptor.get_decapsulator().to_bytes(), skRm);
+    assert_eq! ( encryptor.get_encapsulator().get_recipient_public_key_bytes(), pkRm.as_slice());
 
     let shared_secret2 = decryptor.get_decapsulator().decapsulate(GenericArray::from_slice(&enc)).unwrap();
     assert_eq!(shared_secret2, shared_secret);
@@ -277,8 +279,8 @@ fn a_2_1_v3 ()
                    93decc04ef8a03ecdf7beeff4a3d21d30c44f61b71a");
 
     let (encryptor2, decryptor2) = HpkeIesMlKem1024Sha384Aes256Gcm::derive_pair_from_seed(&ikmR).unwrap();
-    assert_eq! ( decryptor2.get_decapsulator().as_bytes().as_slice(), skRm.as_slice());
-    assert_eq! ( encryptor2.get_encapsulator().as_bytes().as_slice(), pkRm.as_slice());
+    assert_eq! ( decryptor2.get_decapsulator().to_bytes().as_slice(), skRm.as_slice());
+    assert_eq! ( encryptor2.get_encapsulator().to_bytes().as_slice(), pkRm.as_slice());
 
     let shared_secret2 = decryptor2.get_decapsulator().decapsulate(GenericArray::from_slice(&enc)).unwrap();
     assert_eq!(shared_secret2, shared_secret);
@@ -433,8 +435,8 @@ fn a_3_v3()
     assert_eq! ( seed2.as_slice(), skRm);
 
     let (encryptor, decryptor) = HpkeIesMlKem768P256Shake256Aes128Gcm::derive_pair_from_seed(&ikmR).unwrap();
-    assert_eq!( decryptor.get_decapsulator().as_seed_bytes(), Some(skRm.into()));
-    assert_eq!( encryptor.get_encapsulator().as_bytes().as_slice(), pkRm);
+    assert_eq!( decryptor.get_decapsulator().to_bytes(), skRm);
+    assert_eq!( encryptor.get_encapsulator().get_recipient_public_key_bytes(), pkRm.as_slice());
 
     
 //     let decryptor = HpkeQsfP256MlKem768Shake256Aes128Gcm::decryptor_from_bytes(skRm.as_slice().into());
@@ -685,9 +687,9 @@ fn a_4_v3 ()
     let seed2: Array<u8, U32> = hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::Xwing>::derive_secret_others(&ikmR, None).unwrap();
     assert_eq! ( seed2.as_slice(), skRm);
 
-    let (encapsulator, decapsulator) = XwingMlKem768X25519::derive_from_seed(&skRm.into());
-    assert_eq!( encapsulator.as_bytes().as_slice(), pkRm );
-    assert_eq!( decapsulator.as_seed_bytes(), Some(skRm.into()) );
+    let (encapsulator, decapsulator) = XwingMlKem768X25519::generate_deterministic(&skRm.into()).unwrap();
+    assert_eq!( encapsulator.get_recipient_public_key_bytes(), pkRm.as_slice() );
+    assert_eq!( decapsulator.to_bytes(), skRm );
     
     //println! ( "encapsulator_bytes={:02X?}", encapsulator.as_bytes());
     //println! ( "decapsulator_bytes={:02X?}", decapsulator.as_bytes());
@@ -840,10 +842,10 @@ fn a_5_v3 ()
     let seed2: Array<u8, U32> = hpke::hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::Xwing>::derive_secret_others(&ikmR, None).unwrap();
     assert_eq! ( seed2.as_slice(), skRm);
 
-    let (encapsulator, decapsulator) = XwingMlKem768X25519::derive_from_seed(&skRm.into());
+    let (encapsulator, decapsulator) = XwingMlKem768X25519::generate_deterministic(&skRm.into()).unwrap();
     //let (encapsulator, decapsulator) = XwingMlKem768X255192::derive_from_seed(&ikmR.into());
-    assert_eq!( encapsulator.as_bytes().as_slice(), pkRm );
-    assert_eq!( decapsulator.as_seed_bytes(), Some(skRm.into()));
+    assert_eq!( encapsulator.get_recipient_public_key_bytes(), pkRm.as_slice() );
+    assert_eq!( decapsulator.to_bytes(), skRm);
 
 
     //let (encapsulator, decapsulator0 = DeriveExpandSeed)
@@ -986,9 +988,9 @@ fn test_a_6_v3 ()
   let (encryptor, decryptor) = HpkeIesMlKem1024P384Shake256Aes256Gcm::derive_pair_from_seed(&ikmR).unwrap();
   //let (encryptor, decryptor) = kems::draft_ietf_hpke_pq_01::HybridKemQsfP384MlKem1024::derive_from_seed(&seed2);
   //assert_eq!( decryptor.as_bytes().as_slice(), skRm);
-  println!( "pk={:02X?}", encryptor.get_encapsulator().as_bytes());
-   assert_eq!( encryptor.get_encapsulator().as_bytes().as_slice(), pkRm);
-  assert_eq!( decryptor.get_decapsulator().as_seed_bytes(), Some(skRm.into()));
+  println!( "pk={:02X?}", encryptor.get_encapsulator().get_recipient_public_key_bytes());
+   assert_eq!( encryptor.get_encapsulator().get_recipient_public_key_bytes(), pkRm.as_slice());
+  assert_eq!( decryptor.get_decapsulator().to_bytes(), skRm);
 
 //   let decryptor2 = HpkeQsfP384MlKem1024Shake256Aes256Gcm::decryptor_from_bytes(skRm.as_slice().into());
 //   assert_eq!( decryptor2.decapsulator.as_bytes().as_slice(), skRm);

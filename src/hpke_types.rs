@@ -557,32 +557,66 @@ pub mod draft_ietf_jose_hpke_encrypt {
 ///
 /// Post quantum encryption mechanisms for use within JOSE
 /// 
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha3"))]
-pub mod draft_reddy_cose_jose_pqc_hybrid_hpke {
+// #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha3"))]
+// pub mod draft_reddy_cose_jose_pqc_hybrid_hpke {
+//     use crate::hpke_types::sha2_kdfs;
 
-    /// Cipher suite for JOSE-HPKE in Base Mode that uses the P-256 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the AES-256-GCM AEAD.
-    #[cfg(all(feature="rustcrypto-p256", feature="rustcrypto-aes"))]
-    pub type HPKE7MlKem768Aes128 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridKemQsfMlKem768P256, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, aes_gcm::Aes128Gcm>;
+    // Cipher suite for JOSE-HPKE in Base Mode that uses the P-256 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the AES-256-GCM AEAD.
+    // #[cfg(all(feature="rustcrypto-p256", feature="rustcrypto-aes"))]
+    // pub type HPKE7MlKem768Aes128 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridKemQsfMlKem768P256, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, aes_gcm::Aes128Gcm>;
+
+    // Cipher suite for JOSE-HPKE in Base Mode that uses the P-256 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the ChaCha20Poly1305 AEAD.
+    // #[cfg(all(feature="rustcrypto-p256", feature="rustcrypto-chacha20poly1305"))]
+    // pub type HPKE8MlKem768P256ChaCha20Poly1305 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridKemQsfMlKem768P256, sha2_kdfs::HpkeHkdfSha256, chacha20poly1305::ChaCha20Poly1305>;
+
+    // Cipher suite for JOSE-HPKE in Base Mode that uses the X25519 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the AES-256-GCM AEAD
+    // #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
+    // pub type HPKE9MlKem768X25519Aes256 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, aes_gcm::Aes256Gcm>;
+
+    // Cipher suite for JOSE-HPKE in Base Mode that uses the X25519 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the ChaCha20Poly1305 AEAD
+    // #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-chacha20poly1305", feature="rustcrypto-hmac", feature="rustcrypto-sha2"))]
+    // pub type HPKE10MlKem768X25519ChaCha20Poly1305 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, chacha20poly1305::ChaCha20Poly1305>;
+
+    // // Cipher suite for JOSE-HPKE in Base Mode that uses the P-384 + ML-KEM-1024 Hybrid KEM, the SHAKE256 KDF, and the AES-256-GCM AEAD
+    // #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-aes"))]
+    // pub type HPKE11MlKem1024P384Aes256 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, aes_gcm::Aes256Gcm>;
+
+    // /// Cipher suite for JOSE-HPKE in Base Mode that uses the P-384 + ML-KEM-1024 Hybrid KEM, the SHAKE256 KDF, and the ChaCha20Poly1305 AEAD
+    // #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-chacha20poly1305"))]
+    // pub type HPKE12MlKem1024P384ChaCha20Poly1305 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, chacha20poly1305::ChaCha20Poly1305>;
+// }
+
+// https://datatracker.ietf.org/doc/draft-ietf-jose-hpke-pq-pqt/
+#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
+pub mod draft_ietf_jose_hpke_pq 
+{
+    use aes_gcm::Aes256Gcm;
+    #[cfg(all(feature="rustcrypto-p256"))]
+    use kems::draft_ietf_lamps_pq_composite_kem_07::{HybridKemMlKem768P256Sha3_256, HybridKemMlKem1024P384Sha3_256};
+    use kems::mlkem::{WrappedMlKem768, WrappedMlKem1024};
+    use kems::xwing::XwingMlKem768X25519;
+    use crate::*;
+    use crate::hpke_types::sha3_kdfs::{ HpkeOneStepKdfShake256};
+
+    impl KemId for HybridKemMlKem768P256Sha3_256 { type KemType = crate::kem_id::QsfKemMlKem768P256Shake256Sha3256; const IS_AUTH: bool = false;}
+    impl KemId for XwingMlKem768X25519 { type KemType = kem_id::Xwing; const IS_AUTH: bool = false;}
+    impl KemId for HybridKemMlKem1024P384Sha3_256 { type KemType = crate::kem_id::QsfKemMlKem1024P384Shake256Sha3256; const IS_AUTH: bool = false;}
+    impl KemId for WrappedMlKem768 { type KemType = crate::kem_id::MlKem768; const IS_AUTH: bool = false;}
+    impl KemId for WrappedMlKem1024 { type KemType = crate::kem_id::MlKem1024; const IS_AUTH: bool = false;}
 
     /// Cipher suite for JOSE-HPKE in Base Mode that uses the P-256 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the ChaCha20Poly1305 AEAD.
-    #[cfg(all(feature="rustcrypto-p256", feature="rustcrypto-chacha20poly1305"))]
-    pub type HPKE8MlKem768P256ChaCha20Poly1305 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridKemQsfMlKem768P256, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, chacha20poly1305::ChaCha20Poly1305>;
+    #[cfg(all(feature="rustcrypto-p256"))]
+    pub type HPKE8MlKem768P256Aes256 = crate::HpkeIes<HybridKemMlKem768P256Sha3_256, HpkeOneStepKdfShake256, Aes256Gcm>;
 
-    /// Cipher suite for JOSE-HPKE in Base Mode that uses the X25519 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the AES-256-GCM AEAD
-    #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-aes"))]
-    pub type HPKE9MlKem768X25519Aes256 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, aes_gcm::Aes256Gcm>;
+    #[cfg(all(feature="rustcrypto-x25519"))]
+    pub type HPKE9MlKem768X25519Aes256 = crate::HpkeIes<XwingMlKem768X25519, HpkeOneStepKdfShake256, Aes256Gcm>;
 
-    /// Cipher suite for JOSE-HPKE in Base Mode that uses the X25519 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the ChaCha20Poly1305 AEAD
-    #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-chacha20poly1305", feature="rustcrypto-hmac", feature="rustcrypto-sha2"))]
-    pub type HPKE10MlKem768X25519ChaCha20Poly1305 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, chacha20poly1305::ChaCha20Poly1305>;
+    #[cfg(all(feature="rustcrypto-p384"))]
+    pub type HPKE10MlKem768P384Aes256 = crate::HpkeIes<HybridKemMlKem1024P384Sha3_256, HpkeOneStepKdfShake256, Aes256Gcm>;
 
-    /// Cipher suite for JOSE-HPKE in Base Mode that uses the P-384 + ML-KEM-1024 Hybrid KEM, the SHAKE256 KDF, and the AES-256-GCM AEAD
-    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-aes"))]
-    pub type HPKE11MlKem1024P384Aes256 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, aes_gcm::Aes256Gcm>;
+    pub type HPKE12MlKem768Aes256 = crate::HpkeIes<WrappedMlKem768, HpkeOneStepKdfShake256, Aes256Gcm>;
+    pub type HPKE13MlKem1024Aes256 = crate::HpkeIes<WrappedMlKem1024, HpkeOneStepKdfShake256, Aes256Gcm>;
 
-    /// Cipher suite for JOSE-HPKE in Base Mode that uses the P-384 + ML-KEM-1024 Hybrid KEM, the SHAKE256 KDF, and the ChaCha20Poly1305 AEAD
-    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-chacha20poly1305"))]
-    pub type HPKE12MlKem1024P384ChaCha20Poly1305 = crate::HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384, kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, chacha20poly1305::ChaCha20Poly1305>;
 }
 
 
