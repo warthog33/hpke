@@ -5,27 +5,21 @@ use elliptic_curve::{consts::U32};
 use elliptic_curve::common::KeyExport;
 use hex_literal::hex;
 use hpke::HpkeIes;
-use hpke::{hpke_kdf::KdfForKemUsingHkdf};
+use hpke::hpke_kem_wrapper::HpkeKemWrapper;
 use hpke::hpke_types::{HpkeAuthIesP256Sha256Aes256Gcm, HpkeIesP256Sha256Aes256Gcm, HpkeIesP384Sha384Aes256Gcm, HpkeIesP521Sha512Aes256Gcm, HpkeIesX25519Sha256ChaCha20Poly1305};
 use hpke::hpke_types::apple::HpkeIesXwingMl768X25519Sha256Aes256Gcm;
-use hpke::hpke_types::draft_ietf_xwing::HpkeXwingMlKem768X25519;
-use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem1024Sha384Aes256Gcm, HpkeKemMlKem768, HpkeKemMlKem1024, HpkeIesMlKem768P256Shake256Aes128Gcm, HpkeIesKitchenSinkMl768X25519Sha256Aes128Gcm, HpkeIesMlKem768Sha256Aes128Gcm};
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesKitchenSinkMl768X25519Sha256Aes128Gcm, HpkeIesMlKem512Sha256Aes128Gcm, HpkeIesMlKem768P256Shake256Aes128Gcm, HpkeIesMlKem768Sha256Aes128Gcm, HpkeIesMlKem1024Sha384Aes256Gcm, HpkeKemMlKem768, HpkeKemMlKem1024};
 use hpke::hpke_types::p256_kems::{HpkeAuthKemP256HkdfSha256, HpkeKemP256HkdfSha256};
 use hpke::hpke_types::p384_kems::HpkeKemP384HkdfSha384;
 use hpke::hpke_types::p521_kems::HpkeKemP521HkdfSha512;
 use hpke::hpke_types::sha2_kdfs::HpkeHkdfSha384;
 use hpke::hpke_types::x25519_kems::HpkeKemX25519HkdfSha256;
 
-use kems::{Array,Capsulator,GetEncapsulator,Decapsulate,FromKeys, GenerateDeterministic3, Encapsulate, OsRng, GetRecipientPublicKeyBytes};
-use kems::eckem::SeedAsScalar;
+use kem::{TryDecapsulate, Encapsulate, Decapsulator, FromSeed, Kem};
+use kems::eckem::EcdhKemUncompressed;
+use kems::{Array,KemExtensions,FromKeys, OsRng};
 use kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519;
-use kems::kem_with_kdf::{CombinerAllPubKeys, KemWithKdf};
-use kems::generic_array::GenericArray;
-
-// #[cfg(all(feature = "rustcrypto-x25519", feature="rustcrypto-sha2"))]
-// use hpke::hpke_types::HpkeKemKdfX25519HkdfSha256;
-// #[cfg(all(feature = "rustcrypto-p256"))]
-// use p256::NistP256;
+use p256::NistP256;
 
 
 /// openssl pkeyutl -encap -pubin -kemop DHKEM -inkey p256-pub.pem -out encap_out.bin -secret secret.bin
@@ -45,21 +39,13 @@ fn openssl_encap_p256 () {
         dd 7b 05 41 1b 2b a8 f7  2e d6 dc e1 d8 8d c8 b7
         ed ");
 
-    let key = hex!("0b 47 f9 31 fd 65 bb 67  49 12 3b d5 33 22 b0 f6
-        e5 86 34 4b 78 54 28 51  27 27 5d a2 e8 01 a2 b0");
+    let key = hex!("0b47f931 fd65bb67  49123bd5 3322b0f6 e586344b 78542851  27275da2 e801a2b0");
 
-    //let ecc_priv2 = pem::parse(ecc_priv).unwrap();
-    //let recipient_secret_key = elliptic_curve::SecretKey::from_sec1_der(ecc_priv2.contents()).unwrap();
-    //let recipient_public_key = x25519_dalek::PublicKey::from(&recipient_secret_key);
     let recipient_secret_key = elliptic_curve::SecretKey::from_bytes(&ecc_raw_priv.into()).unwrap();
     
-    //pub type HpkeEcCombinerP256HkdfSha256 = kems::eckem::EcCombinerAllPubKeys<hpke::hpke_kdf::HpkeKemKdf::<kdfs::rfc5869_hkdf::Hkdf<sha2::Sha256>, hpke::kem_id::DhKemP256HkdfSha256>>;
-    
-    //let c0_recv =  ::kems::eckem::EcEncapKey::<NistP256,U32,EcUncompressedEncoder<NistP256>>::from_bytes(GenericArray::from_slice(&encapped_key)).unwrap();
-    //let decapsulator = ::kems::eckem::EcdhDecapsulatorUncompressed::<p256::NistP256,HpkeEcCombinerP256HkdfSha256, U32>::from_key(recipient_secret_key);
-    let decapsulator = KemWithKdf::<kems::eckem::EcdhKemUncompressed::<p256::NistP256, SeedAsScalar>, CombinerAllPubKeys, KdfForKemUsingHkdf::<sha2::Sha256, hpke::kem_id::DhKemP256HkdfSha256>, U32>::from_private_key(recipient_secret_key);
+    let decapsulator = HpkeKemWrapper::<EcdhKemUncompressed<NistP256>>::from_private_key(recipient_secret_key);
 
-    let k_recv = decapsulator.decapsulate(encapped_key.as_slice().try_into().unwrap()).unwrap();
+    let k_recv = decapsulator.try_decapsulate(encapped_key.as_slice().try_into().unwrap()).unwrap();
 
     assert! ( k_recv == key);
 
@@ -71,23 +57,15 @@ fn openssl_encap_p256 () {
 #[test]
 fn openssl_encap_x25519 () 
 {
-    use hpke::{hpke_kdf::KdfForKemUsingHkdf};
-    use kems::{Capsulator, eckem::{SeedAsScalar}, kem_with_kdf::{CombinerAllPubKeys, KemWithKdf}};
 
     let ec_priv = hex!("A840D3BBE697EBD0C81095B8E81F62841D929A75772D02DCA3C21FE54956BC53");
     let encapped_key = hex!("6d247204944aedf008f9bc93fa1997185513a0b3047b316db19c24e4e9243844");
     let key = hex!("1e8ae7282beaca3c2cb969ee352f322ae77bee32c32f62e9f6ee8877f4907024");
     
-    let recipient_secret_key = x25519_dalek::StaticSecret::from(ec_priv);
+    //let recipient_secret_key = x25519_dalek::StaticSecret::from(ec_priv);
 
-    //let c0_recv =  ::kems::x25519kem::X25519EncapKey::<U32>::from_bytes(&encapped_key.into()).unwrap();
-    //let c0_recv =  GenericArray::from(&encapped_key.into());
-    //pub type HpkeCombinerX25519HkdfSha256 = kems::eckem::EcCombinerAllPubKeys<hpke::hpke_types::x2519_kems::HpkeKemKdfX25519HkdfSha256>;
-    
-
-    //let decapsulator = ::kems::x25519kem::X25519Decapsulator::<HpkeCombinerX25519HkdfSha256>::from_key(recipient_secret_key);
-    let decapsulator = KemWithKdf::<kems::x25519kem::X25519Capsulator::<SeedAsScalar>, CombinerAllPubKeys, KdfForKemUsingHkdf::<sha2::Sha256, hpke::kem_id::DhKemX25519HkdfSha256>, U32>::from_private_key(recipient_secret_key);
-    let k_recv: Array<u8, U32> = decapsulator.decapsulate(&encapped_key.into()).unwrap();
+    let decapsulator = HpkeKemX25519HkdfSha256::try_from_bytes_decap(&ec_priv.into()); //::from_private_key(recipient_secret_key);
+    let k_recv: Array<u8, U32> = decapsulator.try_decapsulate(&encapped_key.into()).unwrap();
 
     assert! ( k_recv == key);
 }
@@ -132,7 +110,7 @@ fn test_apple_hpke_x25519() {
 
     let decryptor = HpkeIesX25519Sha256ChaCha20Poly1305::decryptor_from_decapsulator(decapsulator);
 
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
+    let result = decryptor.single_shot_open(encapsulated_key.as_slice().try_into().unwrap(), &info, ciphertext.as_slice(), None).unwrap();
 
     assert_eq! ( result, b"hello");
     
@@ -176,7 +154,7 @@ fn test_apple_hpke_p256() {
 
     let decryptor = HpkeIesP256Sha256Aes256Gcm::decryptor_from_decapsulator(decapsulator);
 
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
+    let result = decryptor.single_shot_open(encapsulated_key.as_slice().try_into().unwrap(), &info, ciphertext.as_slice(), None).unwrap();
 
     assert_eq! ( result, b"hello");
     
@@ -205,24 +183,15 @@ fn test_apple_hpke_p384() {
     let encapsulated_key = &BASE64_STANDARD.decode("BLAb2Q+7+yjD17+CPCwooGxwcmFELXI6xrY1/h0ijHdFLJdVA4htb+edFcNa+yMEyFZ4ks0cVQQkaaXAgrOg3RHFn7zeAis3Pq9ZnjTBcggNgLHSOlc/KjIBfYvjk25rgg==").unwrap();
     let ciphertext = &BASE64_STANDARD.decode("LHtZuQKFqCwqp4C142GFMi4GvFwt").unwrap();
 
-    //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
-    let private_key = p384::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP384HkdfSha384::from_private_key(private_key);
-    let encapsulator = decapsulator.encapsulation_key();
-
-    //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
-    //let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::derive_from_seed(&Array::try_from(private_raw.as_slice()).unwrap());
-
-    assert_eq! ( &encapsulator.to_bytes().as_slice()[1..], public_key);
-    // println! ( "pub1={:02X?}", encapsulator.as_bytes());
-    // println! ( "pub2={:02X?}", public_key);
-
-    let decryptor = HpkeIesP384Sha384Aes256Gcm::decryptor_from_decapsulator(decapsulator);
-
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
-
-    assert_eq! ( result, b"hello");
+    let decapsulator = HpkeKemP384HkdfSha384::try_from_bytes_decap(&private_raw.as_slice().try_into().unwrap());
     
+    let encapsulator = decapsulator.encapsulation_key();
+    assert_eq! ( &encapsulator.to_bytes().as_slice()[1..], public_key);
+    
+    let decryptor = HpkeIesP384Sha384Aes256Gcm::decryptor_from_decapsulator(decapsulator);
+    let result = decryptor.single_shot_open(encapsulated_key.as_slice().try_into().unwrap(), &info, ciphertext.as_slice(), None).unwrap();
+
+    assert_eq! ( result, b"hello");    
 }
 
 
@@ -239,25 +208,17 @@ fn test_apple_hpke_p521() {
     let public_key = &BASE64_STANDARD.decode("AJgm/1WGDOHKnxkgjTKoPQJoowTZnoGNuSK8HVdyUp4+9o2RR4/kuiHck+55w32OKfuNoweO4gRgakunv/dFYCFeAWf/uPjIgrByi8AkaiizAcoui4IbEOGvTZkWuaVUHFpYAdMp79h0dIgylqJBW4Pxdwg7Nh/TIhLLRWTUHFGSA3WD").unwrap();
     let encapsulated_key = &BASE64_STANDARD.decode("BAGLi2Ipg/ZejdUsPajFsSBzYS3KM4o9o5auw4hz/g7+7s+tds0VQHTxUmovXDxfu6UEpAvlUEsQn2mlKTql+fdfEQFsUi3fLqTxeRdC3LjvDw2510Wy36SIp9+d6Ss+OcU6ptw2k0dzrQ3ahAF9UU5vZvyXGyb+ERAMiITNwC9xLVlGsg==").unwrap();
     let ciphertext = &BASE64_STANDARD.decode("EQwIunwifRYJ4WP33lS69OTYNvzj").unwrap();
+    
+    let decapsulator = HpkeKemP521HkdfSha512::try_from_slice_decap(private_raw).unwrap();
 
-    //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
-    let private_key = p521::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP521HkdfSha512::from_private_key(private_key);
     let encapsulator = decapsulator.encapsulation_key();
-
-    //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
-    //let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::derive_from_seed(&Array::try_from(private_raw.as_slice()).unwrap());
-
     assert_eq! ( &encapsulator.to_bytes().as_slice()[1..], public_key);
-    // println! ( "pub1={:02X?}", encapsulator.as_bytes());
-    // println! ( "pub2={:02X?}", public_key);
-
+    
     let decryptor = HpkeIesP521Sha512Aes256Gcm::decryptor_from_decapsulator(decapsulator);
 
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
+    let result = decryptor.single_shot_open(encapsulated_key.as_slice().try_into().unwrap(), &info, ciphertext.as_slice(), None).unwrap();
 
     assert_eq! ( result, b"hello");
-    
 }
 
 
@@ -272,25 +233,16 @@ fn test_apple_hpke_p256_sha384_chacha() {
     let ciphertext = &BASE64_STANDARD.decode("dO27R0NZuBa9sSq1HyrSAhkhJu3k").unwrap();
 
     //let private_array: [u8; 32] = private_raw.as_slice().try_into().unwrap();
-    let private_key = p256::SecretKey::from_slice(private_raw).unwrap();
-    let decapsulator = HpkeKemP256HkdfSha256::from_private_key(private_key);
+    //let private_key = p256::SecretKey::from_slice(private_raw).unwrap();
+    //let decapsulator = HpkeKemP256HkdfSha256::from_private_key(private_key);
+    let decapsulator = HpkeKemP256HkdfSha256::try_from_slice_decap(private_raw).unwrap();
     let encapsulator = decapsulator.encapsulation_key();
-
-    //let (encapsulator, decapsulator) = HybridKemQsfX25519MlKem768::derive_from_seed(&Array::try_from(seed_2.as_slice()).unwrap());
-    //let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::derive_from_seed(&Array::try_from(private_raw.as_slice()).unwrap());
-
     assert_eq! ( &encapsulator.to_bytes().as_slice()[1..], public_key);
-    // println! ( "pub1={:02X?}", encapsulator.as_bytes());
-    // println! ( "pub2={:02X?}", public_key);
 
-    //let decryptor = HpkeIes::<HpkeKemP256HkdfSha256, HpkeTwoStepKdf<Hkdf<Sha384>>, chacha20poly1305::ChaCha20Poly1305>::decryptor_from_decapsulator(decapsulator);
-    //let decrypto = HpkeIesP256Sha384ChaCha20Poly1305::decryptor_from_decapsulator(decapsulator);
     let decryptor = HpkeIes::<HpkeKemP256HkdfSha256, HpkeHkdfSha384, chacha20poly1305::ChaCha20Poly1305>::decryptor_from_decapsulator(decapsulator);
-
-    let result = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
+    let result = decryptor.single_shot_open(encapsulated_key.as_slice().try_into().unwrap(), &info, ciphertext.as_slice(), None).unwrap();
 
     assert_eq! ( result, b"hello");
-    
 }
 
 
@@ -313,31 +265,20 @@ fn test_apple_hpke_p256_auth() {
   assert_eq! ( &public_sender_key.to_sec1_bytes()[1..], public_sender_raw.as_slice());
 
 
-  //type HpkeAuthKemP256HkdfSha256 = EcdhAuthCapsulator<NistP256, EcCombinerAllPubKeys::<HpkeKemKdf::<Hkdf<Sha256>, kem_id::DhKemP256HkdfSha256>>,U32, EcRawEncoder<NistP256>>;
-  //impl KemId for HpkeAuthKemP256HkdfSha256 { type KemType = kem_id::DhKemP256HkdfSha256;}
+  let decapsulator = <HpkeAuthKemP256HkdfSha256 as Kem>::DecapsulationKey::from_keys(private_sender_key.public_key(), private_recip_key);
 
-  //let decapsulator = HpkeAuthKemP256HkdfSha256::from_bytes_decap(GenericArray::from_slice(private_recip_raw), GenericArray::from_slice(public_sender_raw));
-  let decapsulator = <HpkeAuthKemP256HkdfSha256 as Capsulator>::Decapsulator::from_keys(private_sender_key.public_key(), private_recip_key);
-
-  //type HpkeAuthIesP256Sha256Aes128Gcm = HpkeIes<HpkeAuthKemP256HkdfSha256, HpkeTwoStepKdf<Hkdf<Sha256>>, aes_gcm::Aes128Gcm, true>;
-  
   let decryptor = HpkeAuthIesP256Sha256Aes256Gcm::auth_decryptor_from_decapsulator(decapsulator);
 
-  let result = decryptor.single_shot_open(GenericArray::from_slice(&encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
+  let result = decryptor.single_shot_open(encapsulated_key.as_slice().try_into().unwrap(), &info, ciphertext.as_slice(), None).unwrap();
 
   assert_eq!( result, b"hello");
-  
-  //let encapsulator = decapsulator.get_encapsulator();
-
-    //let x = concat_bytes! ( b"ABC", b"DEF");
-    //println! ( "x={x}");
 }
 
 #[test]
 fn test_ml_kem_512_hpke () {
     
 
-    let (encryptor, decryptor) = HpkeIesMlKem768Sha256Aes128Gcm::derive_pair_from_seed(&[1u8;64]).unwrap();
+    let (encryptor, decryptor) = HpkeIesMlKem512Sha256Aes128Gcm::derive_pair_from_seed(&[1u8;64]).unwrap();
     
     let (encapsulated_key, encrypted_payload) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"info", None).unwrap();
 
@@ -351,11 +292,11 @@ fn test_ml_kem_512_hpke () {
 #[test]
 fn test_ml_kem_768_hpke () {
     
-    let (encapsulator, decapsulator) = HpkeKemMlKem768::generate_deterministic(&[2u8;64].into()).unwrap();
+    let (decapsulator, encapsulator) = HpkeKemMlKem768::from_seed(&[2u8;64].into());
     let encapsulator_as_bytes = encapsulator.to_bytes();
         
     //let encryptor = hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_encapsulator(encapsulator);
-    let encryptor = HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_slice(&encapsulator_as_bytes);
+    let encryptor = HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_bytes(&encapsulator_as_bytes.as_slice().try_into().unwrap());
     let (encapsulated_key, encrypted_payload) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"info", None).unwrap();
 
     let decryptor = HpkeIesMlKem768Sha256Aes128Gcm::decryptor_from_decapsulator(decapsulator);
@@ -370,18 +311,18 @@ fn test_ml_kem_1024_hpke () {
 
     
     //let (encapsulator, decapsulator) = MlKemWithAddKeyDer::<MlKem1024, U32>::generate(&mut OsRng);
-    let (encapsulator, decapsulator) = HpkeKemMlKem1024::generate_from_rng(&mut OsRng);
+    let (decapsulator, encapsulator ) = HpkeKemMlKem1024::generate_keypair();
     //let priv_key = decapsulator.as_ref();
     //let pub_key = encapsulator.as_ref();
     
 
     //let encapsulator = MlKemEncapsulator::<MlKem1024, <MlKem1024 as KemCore>::EncapsulationKey, U32>::from(pub_key.clone());
     //let (ek, ss_send) = encapsulator.try_encap(&mut OsRng, &pub_key).unwrap();
-    let (ek, ss_send) = encapsulator.encapsulate(&mut OsRng).unwrap();
+    let (ek, ss_send) = encapsulator.encapsulate();
 
     //let decapsulator = MlKemDecapsulator::<MlKem1024>::new(priv_key.clone());
     //let ss_recv = decapsulator.try_decap(&ek).unwrap();
-    let ss_recv = decapsulator.decapsulate(&ek).unwrap();
+    let ss_recv = decapsulator.try_decapsulate(&ek).unwrap();
 
     assert_eq! ( ss_send, ss_recv);
     
@@ -418,10 +359,9 @@ fn test_ml_key_p256_hpke() {
 
 
 #[test]
-fn test_ml_key_x25519_hpke() {
-    
-
-    let (encapsulator, decapsulator) = HybridCapsulatorKitchenSinkMlKem768X25519::generate_from_rng(&mut OsRng);
+fn test_ml_key_x25519_hpke() 
+{
+    let (decapsulator, encapsulator) = HybridCapsulatorKitchenSinkMlKem768X25519::generate_keypair();
     
     let encryptor = HpkeIesKitchenSinkMl768X25519Sha256Aes128Gcm::encryptor_from_encapsulator(encapsulator);
     let (encapped_key, ciphertext) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"Info", None).unwrap();
@@ -432,28 +372,52 @@ fn test_ml_key_x25519_hpke() {
     assert!( plaintext == b"Hello World");
 }
 
-#[test]
-fn test_ml_key_1024_p384_hpke() {
+// #[test]
+// fn test_ml_key_1024_p384_hpke() {
     
-    // let (encapsulator, decapsulator) = HybridKem::<
-    //         MlKemWithAddKeyDer<MlKem1024>, 
-    //         EcdhKem<NistP384, EcCombinerNoPubKeys<PassThroughKdf>, U48, EcCompressedEncoder<NistP384>, ReduceSeed>,
-    //         QsfCombiner<Okdf3::<sha3::Sha3_256, u0>, QsfLabelMlKem1024P384>, 
-    //         ExpandSeed<typenum::U32, kdfs::cshake::XofKdf<sha3::Shake256>>>::generate(&mut OsRng);
+//     // let (encapsulator, decapsulator) = HybridKem::<
+//     //         MlKemWithAddKeyDer<MlKem1024>, 
+//     //         EcdhKem<NistP384, EcCombinerNoPubKeys<PassThroughKdf>, U48, EcCompressedEncoder<NistP384>, ReduceSeed>,
+//     //         QsfCombiner<Okdf3::<sha3::Sha3_256, u0>, QsfLabelMlKem1024P384>, 
+//     //         ExpandSeed<typenum::U32, kdfs::cshake::XofKdf<sha3::Shake256>>>::generate(&mut OsRng);
 
-    use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesQsfMl1024P384Sha256Aes128Gcm;
-use kems::OsRng;
+//     use hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesQsfMl1024P384Sha256Aes128Gcm;
+    
+// // pub type HybridCapsulatorQsfMlKem1024P384 = super::hybrid::HybridKem::<
+// //             //crate::ml_kem::MlKemWithAddKeyDer<ml_kem::MlKem1024>,
+// //             WrappedMlKem1024,
+// //             //super::eckem::EcdhKem<p384::NistP384, crate::eckem::EcCombinerNoPubKeys<kdfs::misc::PassThroughKdf>, cipher::consts::U48, super::eckem::EcCompressedEncoder<p384::NistP384>, crate::eckem::ReduceSeed>, 
+// //             super::eckem::EcdhKem<p384::NistP384, super::eckem::EcCompressedEncoder<p384::NistP384>, crate::eckem::ReduceSeed>, 
+// //             super::hybrid::QsfCombiner<Okdf3::<sha3::Sha3_256, kdfs::u0>, QsfLabelMlKem1024P384>,
+// //             //crate::hybrid::ExpandSeed<typenum::U32, kdfs::cshake::XofKdf<sha3::Shake256>>>;
+// //             crate::hybrid::ExpandSeed<super::U32, shake::Shake256>>;
 
-    let (encapsulator, decapsulator) = kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384::generate_from_rng(&mut OsRng);
+//     // pub type yy = kems::hybrid::HybridKem::<
+//     //         //crate::ml_kem::MlKemWithAddKeyDer<ml_kem::MlKem768>,
+//     //         kems::mlkem::WrappedMlKem1024,
+//     //         //crate::x25519kem::X25519Capsulator<crate::eckem::EcCombinerNoPubKeys<kdfs::misc::PassThroughKdf>, cipher::consts::U32, crate::eckem::SeedAsScalar>,
+//     //         //kems::x25519kem::X25519Capsulator<SeedAsScalar>,
+//     //         kems::eckem::EcdhKem<p384::NistP384, kems::eckem::EcCompressedEncoder<p384::NistP384>, kems::eckem::ReduceSeed>, 
+//     //         kems::hybrid::QsfCombiner<kdfs::iso11770_6::Okdf3::<sha3::Sha3_256, kdfs::u0>, kems::draft_irtf_cfrg_hybrid_kems::QsfLabelMlKem1024P384>,
+//     //         //crate::hybrid::ExpandSeed<typenum::U32, kdfs::cshake::XofKdf<sha3::Shake256>>>;
+//     //         kems::hybrid::ExpandSeed<U32, shake::Shake256>>;
 
-    let encryptor = HpkeIesQsfMl1024P384Sha256Aes128Gcm::encryptor_from_encapsulator(encapsulator);
-    let (encapped_key, ciphertext) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"Info", None).unwrap();
+
+//     // type xx = HpkeIes<yy, hpke::hpke_types::sha2_kdfs::HpkeHkdfSha256, aes_gcm::Aes128Gcm>;
+    
+//     let (decapsulator, encapsulator) = kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384::generate_keypair();
+//     //let x = Array::<u8, hybrid_array::sizes::U1665>::default();
+//     let (encryptor, decryptor) = HpkeIesQsfMl1024P384Sha256Aes128Gcm::generate();
+//     let (encryptor, decryptor ) = HpkeIesKitchenSinkMl768X25519Sha256Aes128Gcm::generate();
+
+//     //let encryptor = HpkeIesQsfMl1024P384Sha256Aes128Gcm::encryptor_from_encapsulator(encapsulator);
+//     let (encapped_key, ciphertext) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"Info", None).unwrap();
                                                     
-    let decryptor = HpkeIesQsfMl1024P384Sha256Aes128Gcm::decryptor_from_decapsulator(decapsulator);
-    let plaintext = decryptor.single_shot_open(&encapped_key, b"Info", ciphertext.as_ref(), None).unwrap();
+//     //let decryptor = HpkeIesQsfMl1024P384Sha256Aes128Gcm::decryptor_from_decapsulator(decapsulator);
+//     let plaintext = decryptor.single_shot_open(&encapped_key, b"Info", ciphertext.as_ref(), None).unwrap();
 
-    assert!( plaintext == b"Hello World");
-}
+//     assert!( plaintext == b"Hello World");
+// }
 
 ///
 /// Sample using an xcode project which uses the new apple APIs for hybrid hpke
@@ -462,23 +426,27 @@ use kems::OsRng;
 fn test_apple_hpke_xwing() {
     let info = hex!("0408");
 
-    let seed = &BASE64_STANDARD.decode("NqAfhJbWnDMut0NWwZjOTD4YhLmfe74jwKbY/txpfpE=").unwrap();
-    let public_key = &BASE64_STANDARD.decode("9Pe9i/LE05J9kIqUDQqsQldheKiWezZoX5JJOUJYZtOmkmWfEmZx3RwHASK6bouTZhcZnINJBQp98tKjNIA1BihVMASeIcd1jwpln3WCBDDBivS7ReK+oFlUCaWcwYdOZGN4+tyKNuC5NzFrDCRXz2MGoCUV2Ulojbd/6VRnPNNbMvxCoOS94SZxKAgcSmJoGzQn+OJt5rQdHyvA7OsJn6VtLpgCtCOO+6qOFcMrz8gbiucgAAUUKBxf9uMKNKUd02c9C8U00pGqTtKiC6E8GbcihIIcrhKHMLkx/6XPOwIp5wqE8qy3nEqG1dPB2KArfmKXkFgl9iWRw4kPjKAlOzSz02EO17wDDXuWbUcIoXrFwbobomdJDAY/6zeuTfLCDNMDAmFr4ZoCHDdEsaI3dLdWCvF+x8gbiIMkdtq05yY6RBmhsBtkOVd2HloCcmSVV/wAYEdPm5l9E/NqhMccIeaCV+HAuGdzkxKCiigCyXEbAOQ8uvyil/bEaaXH7pKdz2Ro2bpAGjOQ0btvy8IfPhxUzBAM0NjNIZyyE0Bx8ssZKZelDfBWxyETkcy2a8A8vGM7t5oaHqWch4QuOzzFeLq+azIZU2Ocz3chuYVQoiZ5WjKZu7W6S8cP8nvKTFNgxplLEiCTfDesJqIi0oTDUjGgvbhEa3sFKeO4gzY57wZoLrUmbfs4psgdYmPEQqGm81J9d8WY9rLPMTlRM7TDXpVF0QSJpue8YpZnLzGdurWqWsOxj/hOswOMgMsdVTaF7gCQohV0eDh7NDBUVheFZAxodUeJvkhf86FGafC/JaGIZgtAfGa7AXCN3tzBliCrf4GDvIEwHCCzyAM8T8s3JFjP67ynWCoaGph8WiPFfYCmhPq1lCcDtQe2GVjDkUXPHCsaK3G2NXPGjUfF4oGj6IyA0YxniXuWefuE6FZw1NF1kimrmhqr21x7tRuY9xSn6nYZbegQ+xdJ/GGPkXkb38Widcoot6WpLgd7VbN1bOYyIHYd3DU4F+UrfepIQqRS83hPYVzGF+tA07FtoQorI+myVGBbKjAwaZWtDNpXOPaoSCCfqcgvSAqduwiBugwa6fa3SFghMACHcaW0/GFY6JfAdKsqC6h+ZVGLvncu/eAs6BGuWhdIhcYoPbRnrSgL/2EMhJxgRzQUTwqq4MF9QNw8EgkPP5dfMqyGHIW27mvDWrwvj3wiftoIrRR3g0gL6FFUU2kEZ8hPFBHExYIILgMYUxmAuUFRs+ezxlmyiIMcgXAGu+QK77NevSOJEOkqnZdsRZeEqSoODTqx8nCrBZMmoiKdxfXOz+sXmJGsp5RP2PIB2da1WnaKCgjL4ABvBBCQo0URpbPHROACYKSdOAGtkquxpieLu0ClGqQkWJEqXfad+SW4hSm7QGuXBJxWghiNu9q3o7aZYZF0djE6LuDHt8eMr5yTEWRCxrYoiOMTM7g15MQLn4wLEBxxMvilmZkH9gUCiWJmG7N6t9W84tl7NRJGPHp+zjZbT4jLX9Ki5ngAv2WiV6h6KJtYTObNgS2Zs91sFlBUq5rHAt3QvZ59unbkJIFmfxGblptTJQDBbuIsXbFyl6bkmb7314wjquR+pHOh0A9GxnHS8b76HQ==").unwrap();
-    let encapsulated_key = &BASE64_STANDARD.decode("bBcrMpyzvFLUFKU5vwewlxn9UXPwMFi3lJFJhCQNGpiGOWyEnhPt1nkBfQDZ3rGWCdDfM97NtWWoPkDywAUaytcUCXEXpHbxLgk5hxLmArOMK5p+8YVFBqdhVlN6Ivd+G5TKKZvn0BPElNHNALsyXXrjujVYB8IqYFaDa+WktCvS9n3IbIFZ/NPIFjcvkl3i/3QA0p+bKvJHmpu5b4ZtWEvtOwtDYTU62IWEYUi6grq611FEwE0X+TEm+XEU/QVpgi01LzpLC81M0LAa5UWxzCCel0Y6v/GkdmvVjqygXN4m7re6KeVUcpZuDzGXARKazMgpLHVExAjeD5BAM8r6BD9noOb43LQOYExjgh9kmTEFYKyFRTRj3nUkADbnqrwsu1/jkbR+fd1rGfa1MxnviQ+RcM5dUVR6TUH+eHTyGAKDz9y315YnBynrINJ0GWyZ0Na8PEDUzdzT0AKRCHU7yz90IEb6BaWlIcLbxa/cSYeUgkO/5CxoWmpJxsrVEpCF8AsS8yHjWiTKoLSos2KcsLN3PBxdDxG4Mbf0BEwdNl3TiYwM1GAngtkeQDmzYK42502H3dZkDbCjDfIWKl2V6Dt1r/k+np1Qau7eBTgRyCsXdMjN90nJCCqI9F+RKf7zjtFWye6682Tvkc2kqv2+7YCvgeoX59mdgCBxlT84M0Sz64y++WhLOFusOsSAvH8BWiQo3IMPjX5I9kLMRWGDtSZYXrd2kXi/DmVDSLU7BJr8ljrwdlrkXDcsOhGb7K1q74pWshRnFIPx4G9lUR5D6iP9tHtYgdjbMrc6EQe+oRG/+hEXIqGd+xowtPoExtSYrrxO6WpBYhH0CFeZ/PGDHNe1QDLLyCLNykUKq2ZziJkDzfeEvFU7db5bTPJ5hy0FpWdYQQ0tQuy50v0JnaYjV9UX77XzMWYFNWMbyhIrLycfJddDj78ssNApQtzaoaT98VPLmT6+AZODD1La9LXqWXwpIf8xVky6DwGFvQU4wPR8LRlM3uu4JYEmck/8L3KaenHztO7SYhzk2IL+whs3mVtUHxkPEeSAGPK+TQA0nQmTfYTwAgeR0IcLPTfpERnPf3r3OhSCIbuvry3YbtWic+xmAenlIRsxyWwUaGW7u1Bq2BshNbq9oppX4NWVA1gly1F5ag6bNS6A9UhEGpPnxe/ZhF6O5PbhZIgGF0T6Z3WnRzgGfYZ8Q4eR3hvnBE3voHtEQY938dCQOqfu5E7ca4e4YJMb5yh5Eh7kOOnH4D/7tDQVHjTBwb3f3A/GWNxu5jEXd75dH3+1i1lssKGm8PSzVVRdpa0xrj73nTVbFfVuM+zCIKgpvXFGvPAnIArOe62sj1aoFPJaQdaFozv0Buwk22sB8pxWedmJ2pXsn0kAyOdDN6M+JMbFtzwhvmzbhnc0sKLH1L69pZOmwuTjjIUUOEGgNUF9Xt+Ml1Qeiy4lgsD+VQlRDE4Gh6DaaC5CpOD5HAU+nzP0KhAFg2dbMw==").unwrap();
-    let ciphertext = &BASE64_STANDARD.decode("S/eqVx5Rm0KZzVPKSnGwYqD30dW0").unwrap();
+    let seed = BASE64_STANDARD.decode("NqAfhJbWnDMut0NWwZjOTD4YhLmfe74jwKbY/txpfpE=").unwrap();
+    let public_key = BASE64_STANDARD.decode("9Pe9i/LE05J9kIqUDQqsQldheKiWezZoX5JJOUJYZtOmkmWfEmZx3RwHASK6bouTZhcZnINJBQp98tKjNIA1BihVMASeIcd1jwpln3WCBDDBivS7ReK+oFlUCaWcwYdOZGN4+tyKNuC5NzFrDCRXz2MGoCUV2Ulojbd/6VRnPNNbMvxCoOS94SZxKAgcSmJoGzQn+OJt5rQdHyvA7OsJn6VtLpgCtCOO+6qOFcMrz8gbiucgAAUUKBxf9uMKNKUd02c9C8U00pGqTtKiC6E8GbcihIIcrhKHMLkx/6XPOwIp5wqE8qy3nEqG1dPB2KArfmKXkFgl9iWRw4kPjKAlOzSz02EO17wDDXuWbUcIoXrFwbobomdJDAY/6zeuTfLCDNMDAmFr4ZoCHDdEsaI3dLdWCvF+x8gbiIMkdtq05yY6RBmhsBtkOVd2HloCcmSVV/wAYEdPm5l9E/NqhMccIeaCV+HAuGdzkxKCiigCyXEbAOQ8uvyil/bEaaXH7pKdz2Ro2bpAGjOQ0btvy8IfPhxUzBAM0NjNIZyyE0Bx8ssZKZelDfBWxyETkcy2a8A8vGM7t5oaHqWch4QuOzzFeLq+azIZU2Ocz3chuYVQoiZ5WjKZu7W6S8cP8nvKTFNgxplLEiCTfDesJqIi0oTDUjGgvbhEa3sFKeO4gzY57wZoLrUmbfs4psgdYmPEQqGm81J9d8WY9rLPMTlRM7TDXpVF0QSJpue8YpZnLzGdurWqWsOxj/hOswOMgMsdVTaF7gCQohV0eDh7NDBUVheFZAxodUeJvkhf86FGafC/JaGIZgtAfGa7AXCN3tzBliCrf4GDvIEwHCCzyAM8T8s3JFjP67ynWCoaGph8WiPFfYCmhPq1lCcDtQe2GVjDkUXPHCsaK3G2NXPGjUfF4oGj6IyA0YxniXuWefuE6FZw1NF1kimrmhqr21x7tRuY9xSn6nYZbegQ+xdJ/GGPkXkb38Widcoot6WpLgd7VbN1bOYyIHYd3DU4F+UrfepIQqRS83hPYVzGF+tA07FtoQorI+myVGBbKjAwaZWtDNpXOPaoSCCfqcgvSAqduwiBugwa6fa3SFghMACHcaW0/GFY6JfAdKsqC6h+ZVGLvncu/eAs6BGuWhdIhcYoPbRnrSgL/2EMhJxgRzQUTwqq4MF9QNw8EgkPP5dfMqyGHIW27mvDWrwvj3wiftoIrRR3g0gL6FFUU2kEZ8hPFBHExYIILgMYUxmAuUFRs+ezxlmyiIMcgXAGu+QK77NevSOJEOkqnZdsRZeEqSoODTqx8nCrBZMmoiKdxfXOz+sXmJGsp5RP2PIB2da1WnaKCgjL4ABvBBCQo0URpbPHROACYKSdOAGtkquxpieLu0ClGqQkWJEqXfad+SW4hSm7QGuXBJxWghiNu9q3o7aZYZF0djE6LuDHt8eMr5yTEWRCxrYoiOMTM7g15MQLn4wLEBxxMvilmZkH9gUCiWJmG7N6t9W84tl7NRJGPHp+zjZbT4jLX9Ki5ngAv2WiV6h6KJtYTObNgS2Zs91sFlBUq5rHAt3QvZ59unbkJIFmfxGblptTJQDBbuIsXbFyl6bkmb7314wjquR+pHOh0A9GxnHS8b76HQ==").unwrap();
+    let encapsulated_key = BASE64_STANDARD.decode("bBcrMpyzvFLUFKU5vwewlxn9UXPwMFi3lJFJhCQNGpiGOWyEnhPt1nkBfQDZ3rGWCdDfM97NtWWoPkDywAUaytcUCXEXpHbxLgk5hxLmArOMK5p+8YVFBqdhVlN6Ivd+G5TKKZvn0BPElNHNALsyXXrjujVYB8IqYFaDa+WktCvS9n3IbIFZ/NPIFjcvkl3i/3QA0p+bKvJHmpu5b4ZtWEvtOwtDYTU62IWEYUi6grq611FEwE0X+TEm+XEU/QVpgi01LzpLC81M0LAa5UWxzCCel0Y6v/GkdmvVjqygXN4m7re6KeVUcpZuDzGXARKazMgpLHVExAjeD5BAM8r6BD9noOb43LQOYExjgh9kmTEFYKyFRTRj3nUkADbnqrwsu1/jkbR+fd1rGfa1MxnviQ+RcM5dUVR6TUH+eHTyGAKDz9y315YnBynrINJ0GWyZ0Na8PEDUzdzT0AKRCHU7yz90IEb6BaWlIcLbxa/cSYeUgkO/5CxoWmpJxsrVEpCF8AsS8yHjWiTKoLSos2KcsLN3PBxdDxG4Mbf0BEwdNl3TiYwM1GAngtkeQDmzYK42502H3dZkDbCjDfIWKl2V6Dt1r/k+np1Qau7eBTgRyCsXdMjN90nJCCqI9F+RKf7zjtFWye6682Tvkc2kqv2+7YCvgeoX59mdgCBxlT84M0Sz64y++WhLOFusOsSAvH8BWiQo3IMPjX5I9kLMRWGDtSZYXrd2kXi/DmVDSLU7BJr8ljrwdlrkXDcsOhGb7K1q74pWshRnFIPx4G9lUR5D6iP9tHtYgdjbMrc6EQe+oRG/+hEXIqGd+xowtPoExtSYrrxO6WpBYhH0CFeZ/PGDHNe1QDLLyCLNykUKq2ZziJkDzfeEvFU7db5bTPJ5hy0FpWdYQQ0tQuy50v0JnaYjV9UX77XzMWYFNWMbyhIrLycfJddDj78ssNApQtzaoaT98VPLmT6+AZODD1La9LXqWXwpIf8xVky6DwGFvQU4wPR8LRlM3uu4JYEmck/8L3KaenHztO7SYhzk2IL+whs3mVtUHxkPEeSAGPK+TQA0nQmTfYTwAgeR0IcLPTfpERnPf3r3OhSCIbuvry3YbtWic+xmAenlIRsxyWwUaGW7u1Bq2BshNbq9oppX4NWVA1gly1F5ag6bNS6A9UhEGpPnxe/ZhF6O5PbhZIgGF0T6Z3WnRzgGfYZ8Q4eR3hvnBE3voHtEQY938dCQOqfu5E7ca4e4YJMb5yh5Eh7kOOnH4D/7tDQVHjTBwb3f3A/GWNxu5jEXd75dH3+1i1lssKGm8PSzVVRdpa0xrj73nTVbFfVuM+zCIKgpvXFGvPAnIArOe62sj1aoFPJaQdaFozv0Buwk22sB8pxWedmJ2pXsn0kAyOdDN6M+JMbFtzwhvmzbhnc0sKLH1L69pZOmwuTjjIUUOEGgNUF9Xt+Ml1Qeiy4lgsD+VQlRDE4Gh6DaaC5CpOD5HAU+nzP0KhAFg2dbMw==").unwrap();
+    let ciphertext = BASE64_STANDARD.decode("S/eqVx5Rm0KZzVPKSnGwYqD30dW0").unwrap();
 
     //let (encapsulator, decapsulator) = XwingMlKem768X25519::derive_from_seed(&Array::try_from(seed.as_slice()).unwrap());
     //let decapsulator = <HpkeXwingMlKem768X25519 as Capsulator>::Decapsulator::new_from_slice(&Array::try_from(seed.as_slice()).unwrap());
 
-    let decapsulator = HpkeXwingMlKem768X25519::from_bytes_decap(seed.as_slice().try_into().unwrap());
-    //let decapsulator = HpkeXwingMlKem768X25519::try_from_slice_decap(seed.as_slice().try_into().unwrap()).unwrap();
-    let encapsulator = decapsulator.encapsulation_key();
-
-    assert_eq! ( encapsulator.get_recipient_public_key_bytes(), public_key.as_slice());
+    //let decapsulator = HpkeXwingMlKem768X25519::from_bytes_decap(seed.as_slice().try_into().unwrap());
     
-    let decryptor = HpkeIesXwingMl768X25519Sha256Aes256Gcm::decryptor_from_decapsulator(decapsulator);
+    let decryptor = HpkeIesXwingMl768X25519Sha256Aes256Gcm::try_decryptor_from_slice(&seed).unwrap();
+    //let (encryptor, decryptor) = HpkeIesXwingMl768X25519Sha256Aes256Gcm::derive_pair_from_seed(seed.as_slice().try_into().unwrap()).unwrap();
+    //let (decapsulator,_) = HpkeXwingMlKem768X25519::from_seed(seed.as_slice().try_into().unwrap());
 
-    let decrypted = decryptor.single_shot_open(GenericArray::from_slice(encapsulated_key.as_slice()), &info, ciphertext.as_slice(), None).unwrap();
+    //let decapsulator = HpkeXwingMlKem768X25519::try_from_slice_decap(seed.as_slice().try_into().unwrap()).unwrap();
+    //let encapsulator = decapsulator.encapsulation_key();
+    assert_eq! ( decryptor.get_encryptor().get_encapsulator().to_bytes().as_slice(), public_key.as_slice());
+    
+    //let decryptor = HpkeIesXwingMl768X25519Sha256Aes256Gcm::decryptor_from_decapsulator(decapsulator);
+
+    let decrypted = decryptor.single_shot_open(encapsulated_key.as_slice().try_into().unwrap(), &info, ciphertext.as_slice(), None).unwrap();
 
     assert_eq! ( decrypted, b"hello");
 }

@@ -4,21 +4,21 @@
 //! 
 #[allow(unused)]
 use crate::hpke_kdf::*;
+
 #[allow(unused)]
-use crate::{HpkeIes, HpkeEcKeyGen, KemId, KdfId, kdf_id, kem_id, AeadId, aead_id };
+use crate::{HpkeIes, KemParams, KdfId, kdf_id, kem_id, AeadId, aead_id };
 #[allow(unused)]
 use kdfs::hybrid_array::sizes::{*};
 #[allow(unused)]
 use kdfs::{iso11770_6::{Kpf1, Ktf1, Tkdf}};
-#[cfg(all(feature="rustcrypto-ml-kem"))]
-use kems::draft_irtf_cfrg_concrete_hybrid_kems::{ConcreteMlKem768P256, ConcreteMlKem1024P384, LabelMlKem768P256, LabelMlKem1024P384};
+
 #[allow(unused)]
-use kems::eckem::{EcdhAuthCapsulatorUncompressed, EcdhKemUncompressed, SeedAsScalar};
+use kems::eckem::{EcdhAuthKemUncompressed, EcdhKemUncompressed};
 #[allow(unused)]
-use kems::hybrid::{DeriveExpandSeed, HybridKem, QsfCombiner};
+use kems::hybrid::{HybridKem, QsfCombiner};
 use kems::kem_with_kdf::{CombinerAllPubKeys, KemAuthWithKdf, KemWithKdf};
-#[cfg(all(feature="rustcrypto-ml-kem"))]
-use kems::ml_kem::MlKemWrapper;
+// #[cfg(all(feature="rustcrypto-ml-kem"))]
+// use kems::ml_kem::MlKemWrapper;
 #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-ml-kem"))]
 use kems::xwing::{ LabelXWing, XwingMlKem768X25519};
 #[cfg(all(feature = "rustcrypto-ml-kem"))]
@@ -31,29 +31,55 @@ use shake::{Shake128, Shake256};
 #[cfg(all(feature = "rustcrypto-sha3"))]
 use turboshake::{CTurboShake128, CTurboShake256};
 
-/// Hpke uses ECDH with uncompressed SEC1 format for public keys and a combiner which uses all public keys available
-pub type HpkeEcdhKem<C,K,L,D> = KemWithKdf<EcdhKemUncompressed<C,D>, CombinerAllPubKeys, K, L>;
-/// Hpke uses ECDH with uncompressed SEC1 format for public keys and a combiner which uses all public keys available
-pub type HpkeEcdhAuthKem<C,K,L,D> = KemAuthWithKdf<EcdhAuthCapsulatorUncompressed<C,D>, CombinerAllPubKeys, K,L>;
+use kdfs::{Label, misc::PassThroughKdf};
 
+use kdfs::rfc5869_hkdf::Hkdf;
+//use crate::hpke_kem_wrapper::HpkeKemWrapper;
+
+/// Hpke uses ECDH with uncompressed SEC1 format for public keys and a combiner which uses all public keys available
+pub type HpkeEcdhKem<C,K,L> = KemWithKdf<EcdhKemUncompressed<C>, CombinerAllPubKeys, K, L>;
+/// Hpke uses ECDH with uncompressed SEC1 format for public keys and a combiner which uses all public keys available
+pub type HpkeEcdhAuthKem<C,K,L> = KemAuthWithKdf<EcdhAuthKemUncompressed<C>, CombinerAllPubKeys, K,L>;
+
+use crate::hpke_kem_wrapper::{ HpkeKemWrapper, TwoStageXKeyGen, TwoStageEcKeyGen, OneStageSeedDiversify, TwoStageEcCombiner};  
 ///
 /// HPKE Key Encapsulation Mechanisms which involve X25519
 /// 
 #[cfg(all(feature = "rustcrypto-x25519", feature = "rustcrypto-sha2"))]
 pub mod x25519_kems {
+    use crate::hpke_kem_wrapper::TwoStageEcCombiner;
     use super::*;
-    use kems::x25519kem::{X25519AuthCapsulator, X25519Capsulator};
+    use kems::x25519kem::{X25519AuthKem, X25519Kem};
 
-    pub type HpkeKemKdfX25519HkdfSha256 = KdfForKemUsingHkdf<Sha256, kem_id::DhKemX25519HkdfSha256>;
-    pub type HpkeKeyGenKdfX25519HkdfSha256 = KdfForKeyGenUsingHkdf2<Sha256, kem_id::DhKemX25519HkdfSha256>;
+    //pub type HpkeKemKdfX25519HkdfSha256 = KdfForKemUsingHkdf<Sha256, kem_id::DhKemX25519HkdfSha256>;
+    //pub type HpkeKeyGenKdfX25519HkdfSha256 = KdfForKeyGenUsingHkdf2<Sha256, kem_id::DhKemX25519HkdfSha256>;
     
-    pub type HpkeKemX25519HkdfSha256 = KemWithKdf<X25519Capsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>>, 
-        CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32>;
-    impl KemId for HpkeKemX25519HkdfSha256 { type KemType = kem_id::DhKemX25519HkdfSha256; const IS_AUTH: bool = false; }
+    //pub type HpkeKemX25519HkdfSha256 = KemWithKdf<X25519Capsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>>, 
+    //pub type HpkeKemX25519HkdfSha256 = KemWithKdf<X25519Capsulator<SeedAsScalar>, CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32>;
+    //pub type HpkeKemX25519HkdfSha256 = HpkeKemWrapper<KemWithKdf<X25519Kem, CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32>, HpkeKeyGenKdfX25519HkdfSha256, HpkeKeyGenKdfX25519HkdfSha256>;
+    //pub type HpkeKemX25519HkdfSha256 = HpkeEcKemWrapper<KemWithKdf<X25519Kem, CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32>, HpkeKeyGenKdfX25519HkdfSha256, HpkeKeyGenKdfX25519HkdfSha256>;
+    pub type HpkeKemX25519HkdfSha256 = HpkeKemWrapper<X25519Kem>;
+    impl KemParams for HpkeKemX25519HkdfSha256 { 
+        type KemId = kem_id::DhKemX25519HkdfSha256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = TwoStageXKeyGen<Hkdf<Sha256>, Self::KemId>;
+        type EncapsulateFromSeed = TwoStageXKeyGen<Hkdf<Sha256>, Self::KemId>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha256>, Self::KemId>;
+    }
     
-    pub type HpkeAuthKemX25519HkdfSha256 = KemAuthWithKdf<X25519AuthCapsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>>,
-        CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32>;
-    impl KemId for HpkeAuthKemX25519HkdfSha256 { type KemType = kem_id::DhKemX25519HkdfSha256; const IS_AUTH: bool = true; }
+    //pub type HpkeAuthKemX25519HkdfSha256 = KemAuthWithKdf<X25519AuthCapsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>>, CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32>;
+    //pub type HpkeAuthKemX25519HkdfSha256 = HpkeEcKemWrapper<KemAuthWithKdf<X25519AuthKem, CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32>, HpkeKeyGenKdfX25519HkdfSha256, HpkeKeyGenKdfX25519HkdfSha256>;
+    pub type HpkeAuthKemX25519HkdfSha256 = HpkeKemWrapper<X25519AuthKem>;
+    impl KemParams for HpkeAuthKemX25519HkdfSha256 { 
+        type KemId = kem_id::DhKemX25519HkdfSha256; 
+        const IS_AUTH: bool = true; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = TwoStageXKeyGen<Hkdf<Sha256>, Self::KemId>;
+        type EncapsulateFromSeed = TwoStageXKeyGen<Hkdf<Sha256>, Self::KemId>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha256>, Self::KemId>;
+        
+    }
 }
 
 ///
@@ -61,17 +87,29 @@ pub mod x25519_kems {
 /// 
 #[cfg(all(feature = "rustcrypto-x448", feature="rustcrypto-sha2"))]
 pub mod x448_kems {
-    use super::*;
-    use kems::x448kem::X448Capsulator;
+    
+
+use super::*;
+    use kems::x448kem::X448Kem;
 
     //pub type HpkeKemKdfX448HkdfSha512 = HpkeLabelledKdf<Hkdf<Sha512>, HpkeKemLabel<kem_id::DhKemX448HkdfSha512>>;
-    pub type HpkeKemKdfX448HkdfSha512 = KdfForKemUsingHkdf<Sha512, kem_id::DhKemX448HkdfSha512>;
+    //pub type HpkeKemKdfX448HkdfSha512 = KdfForKemUsingHkdf<Sha512, kem_id::DhKemX448HkdfSha512>;
     // pub type HpkeKeyGenKdfX448HkdfSha512 = Tkdf<LabelledExtract::<Ktf1<HmacReset<Sha512>>, LabelHpkeV1, LabelKem<kem_id::DhKemX448HkdfSha512>, LabelKeyGenExtract>, 
     //                                LabelledExpand::<Kpf1<HmacReset<Sha512>,u8>, LabelHpkeV1, LabelKem<kem_id::DhKemX448HkdfSha512>, LabelKeyGenExpand>>;
-    pub type HpkeKeyGenKdfX448HkdfSha512 = KdfForKeyGenUsingHkdf2<Sha512, kem_id::DhKemX448HkdfSha512>;
+    //pub type HpkeKeyGenKdfX448HkdfSha512 = KdfForKeyGenUsingHkdf2<Sha512, kem_id::DhKemX448HkdfSha512>;
 
-    pub type HpkeKemX448HkdfSha512 = KemWithKdf<X448Capsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX448HkdfSha512>>, CombinerAllPubKeys, HpkeKemKdfX448HkdfSha512, U64>;
-    impl KemId for HpkeKemX448HkdfSha512 { type KemType = kem_id::DhKemX448HkdfSha512; const IS_AUTH: bool = false;}
+    //pub type HpkeKemX448HkdfSha512 = KemWithKdf<X448Capsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX448HkdfSha512>>, CombinerAllPubKeys, HpkeKemKdfX448HkdfSha512, U64>;
+    //pub type HpkeKemX448HkdfSha512 = HpkeKemWrapper<KemWithKdf<X448Kem, CombinerAllPubKeys, HpkeKemKdfX448HkdfSha512, U64>, HpkeKeyGenKdfX448HkdfSha512, HpkeKeyGenKdfX448HkdfSha512>;
+    pub type HpkeKemX448HkdfSha512 = HpkeKemWrapper<X448Kem>;
+
+    impl KemParams for HpkeKemX448HkdfSha512 { 
+        type KemId = kem_id::DhKemX448HkdfSha512; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U64; 
+        type KeyGenFromSeed = TwoStageXKeyGen<Hkdf<Sha512>, Self::KemId>;
+        type EncapsulateFromSeed = TwoStageXKeyGen<Hkdf<Sha512>, Self::KemId>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha512>, Self::KemId>;
+    }
 }
 
 ///
@@ -80,23 +118,43 @@ pub mod x448_kems {
 #[cfg(all(feature = "rustcrypto-p256", feature = "rustcrypto-sha2"))]
 pub mod p256_kems {
     use p256::NistP256;
+    use crate::hpke_kem_wrapper::HpkeKemWrapper;
     use super::*;
 
     /// HPKE Kem using P-256 curve and Hkdf key derivation, with a specific diversifier value
-    pub type HpkeKemKdfP256HkdfSha256 = KdfForKemUsingHkdf<Sha256, kem_id::DhKemP256HkdfSha256>;
-    pub type HpkeKeyGenKdfP256HkdfSha256 = KdfForKeyGenUsingHkdf<Sha256, kem_id::DhKemP256HkdfSha256>;
+    //pub type HpkeKemKdfP256HkdfSha256 = KdfForKemUsingHkdf<Sha256, kem_id::DhKemP256HkdfSha256>;
+    //pub type HpkeKeyGenKdfP256HkdfSha256 = KdfForKeyGenUsingHkdf<Sha256, kem_id::DhKemP256HkdfSha256>;
+    //pub type HpkeKeyGenKdfP256HkdfSha2562 = EcGenKdf<NistP256, KdfForKeyGenUsingHkdf::<Sha256, kem_id::DhKemP256HkdfSha256>>;
     
     /// Implementation of the KEM using NIST P256 key agreement and a HKDF-SHA256 key derivation function
-    pub type HpkeKemP256HkdfSha256 = HpkeEcdhKem<NistP256, HpkeKemKdfP256HkdfSha256, U32, HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>;
+    //pub type HpkeKemP256HkdfSha256 = HpkeEcdhKem<NistP256, HpkeKemKdfP256HkdfSha256, U32, HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>;
+    //pub type HpkeKemP256HkdfSha256 = HpkeKemWrapper<KemWithKdf<EcdhKemUncompressed<NistP256>, CombinerAllPubKeys, HpkeKemKdfP256HkdfSha256, U32>, HpkeKeyGenKdfP256HkdfSha2562, HpkeKeyGenKdfP256HkdfSha2562>;
     //pub type HpkeKemP256HkdfSha256 = HpkeEcdhKem<NistP256, HpkeKemKdfP256HkdfSha256, U32, HpkeEcKeyGen<HmacReset<Sha256>, kem_id::DhKemP256HkdfSha256>>;
-    impl KemId for HpkeKemP256HkdfSha256 { type KemType = kem_id::DhKemP256HkdfSha256; const IS_AUTH: bool = false; }
+    
+    pub type HpkeKemP256HkdfSha256 = HpkeKemWrapper<EcdhKemUncompressed<NistP256>>;
+    impl KemParams for HpkeKemP256HkdfSha256 { 
+        type KemId = kem_id::DhKemP256HkdfSha256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = TwoStageEcKeyGen<Hkdf<Sha256>, Self::KemId, 0xFF>;
+        type EncapsulateFromSeed = TwoStageEcKeyGen<Hkdf<Sha256>, Self::KemId, 0xFF>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha256>, Self::KemId>;
+        
+    }
 
     /// Authenticated Hpke Kem using P-256 curve and Hkdf key derivation
-    pub type HpkeAuthKemP256HkdfSha256 = HpkeEcdhAuthKem<NistP256, HpkeKemKdfP256HkdfSha256, U32, HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>;
+    //pub type HpkeAuthKemP256HkdfSha256Old = HpkeEcdhAuthKem<NistP256, HpkeKemKdfP256HkdfSha256, U32, HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>;
+    //    pub type HpkeEcdhAuthP256HkdfSha256Kem = KemAuthWithKdf<EcdhAuthCapsulatorUncompressed<NistP256>, CombinerAllPubKeys, KdfForKemUsingHkdf::<Sha256, kem_id::DhKemP256HkdfSha256>,U32>;
 
-//    pub type HpkeEcdhAuthP256HkdfSha256Kem = KemAuthWithKdf<EcdhAuthCapsulatorUncompressed<NistP256>, CombinerAllPubKeys, KdfForKemUsingHkdf::<Sha256, kem_id::DhKemP256HkdfSha256>,U32>;
-
-    impl KemId for HpkeAuthKemP256HkdfSha256 { type KemType = kem_id::DhKemP256HkdfSha256; const IS_AUTH: bool = true; }
+    pub type HpkeAuthKemP256HkdfSha256 = HpkeKemWrapper<EcdhAuthKemUncompressed<NistP256>>;
+    impl KemParams for HpkeAuthKemP256HkdfSha256 { 
+        type KemId = kem_id::DhKemP256HkdfSha256; 
+        const IS_AUTH: bool = true; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = TwoStageEcKeyGen<Hkdf<Sha256>, Self::KemId, 0xFF>;
+        type EncapsulateFromSeed = TwoStageEcKeyGen<Hkdf<Sha256>, Self::KemId, 0xFF>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha256>, Self::KemId>;
+    }
 }
 
 ///
@@ -108,13 +166,26 @@ pub mod p384_kems {
     use sha2::Sha384;
 
     /// Kem using HKDF, with diversification data specific to use with P-384
-    pub type HpkeKemKdfP384HkdfSha384 = KdfForKemUsingHkdf::<Sha384, kem_id::DhKemP384HkdfSha384>;
+    //pub type HpkeKemKdfP384HkdfSha384 = KdfForKemUsingHkdf::<Sha384, kem_id::DhKemP384HkdfSha384>;
     /// Kdf designed for use within a key generation function, with diversification data specific to use with P-384
-    pub type HpkeKeyGenKdfP384HkdfSha384 = KdfForKeyGenUsingHkdf::<Sha384, kem_id::DhKemP384HkdfSha384>;
+    //pub type HpkeKeyGenKdfP384HkdfSha384 = KdfForKeyGenUsingHkdf::<Sha384, kem_id::DhKemP384HkdfSha384>;
+    //pub type HpkeKeyGenKdfP384HkdfSha384 = EcGenKdf<p384::NistP384, KdfForKeyGenUsingHkdf::<Sha384, kem_id::DhKemP384HkdfSha384>>;
     
     /// Implementation of the KEM from RFC9180 which uses Nist P384 and Hkdf-Sha384 key derivation
-    pub type HpkeKemP384HkdfSha384 = HpkeEcdhKem<p384::NistP384, HpkeKemKdfP384HkdfSha384, U48, HpkeEcKeyGen<HpkeKeyGenKdfP384HkdfSha384>>;
-    impl KemId for HpkeKemP384HkdfSha384 { type KemType = kem_id::DhKemP384HkdfSha384; const IS_AUTH: bool = false; }
+    //pub type HpkeKemP384HkdfSha384 = HpkeEcdhKem<p384::NistP384, HpkeKemKdfP384HkdfSha384, U48, HpkeEcKeyGen<HpkeKeyGenKdfP384HkdfSha384>>;
+    //pub type HpkeKemP384HkdfSha384 = HpkeEcdhKem<p384::NistP384, HpkeKemKdfP384HkdfSha384, U48, PassThroughKdf>;
+    //pub type HpkeKemP384HkdfSha384 = HpkeKemWrapper<KemWithKdf<EcdhKemUncompressed<p384::NistP384>, CombinerAllPubKeys, HpkeKemKdfP384HkdfSha384, U48>, HpkeKeyGenKdfP384HkdfSha384, HpkeKeyGenKdfP384HkdfSha384>;
+    pub type HpkeKemP384HkdfSha384 = HpkeKemWrapper<EcdhKemUncompressed<p384::NistP384>>;
+    
+    impl KemParams for HpkeKemP384HkdfSha384 { 
+        type KemId = kem_id::DhKemP384HkdfSha384; 
+        const IS_AUTH: bool = false;
+        type OutputSize = U48; 
+        type KeyGenFromSeed = TwoStageEcKeyGen<Hkdf<Sha384>, Self::KemId, 0xFF>;
+        type EncapsulateFromSeed = TwoStageEcKeyGen<Hkdf<Sha384>, Self::KemId, 0xFF>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha384>, Self::KemId>;
+        
+    }
 }
 
 ///
@@ -126,17 +197,36 @@ pub mod p521_kems {
     use p521::NistP521;
 
     //pub type HpkeKemKdfP521HkdfSha512 = HpkeLabelledKdf::<Hkdf<Sha512>, HpkeKemLabel<kem_id::DhKemP521HkdfSha512>>;
-    pub type HpkeKemKdfP521HkdfSha512 = KdfForKemUsingHkdf::<Sha512, kem_id::DhKemP521HkdfSha512>;
+    //pub type HpkeKemKdfP521HkdfSha512 = KdfForKemUsingHkdf::<Sha512, kem_id::DhKemP521HkdfSha512>;
     /// Kdf designed for use within a key generation function, with diversification data specific to use with P-521
-    pub type HpkeKeyGenKdfP521HkdfSha512 = KdfForKeyGenUsingHkdf::<Sha512, kem_id::DhKemP521HkdfSha512>;
+    //pub type HpkeKeyGenKdfP521HkdfSha512 = KdfForKeyGenUsingHkdf::<Sha512, kem_id::DhKemP521HkdfSha512>;
+    //pub type HpkeKeyGenKdfP521HkdfSha5122 = EcGenKdf<p521::NistP521, KdfForKeyGenUsingHkdf::<Sha512, kem_id::DhKemP521HkdfSha512>>;
 
     /// Implementation of a KEM using Nist P521 key agreement with a HKDF-SHA512 key derivation function
-    pub type HpkeKemP521HkdfSha512 = HpkeEcdhKem<NistP521, HpkeKemKdfP521HkdfSha512, U64, HpkeEcKeyGen<HpkeKeyGenKdfP521HkdfSha512>>;
-    impl KemId for HpkeKemP521HkdfSha512 { type KemType = kem_id::DhKemP521HkdfSha512; const IS_AUTH: bool = false;}
+    //pub type HpkeKemP521HkdfSha512 = HpkeEcdhKem<NistP521, HpkeKemKdfP521HkdfSha512, U64, HpkeEcKeyGen<HpkeKeyGenKdfP521HkdfSha512>>;
+    //pub type HpkeKemP521HkdfSha512 = HpkeKemWrapper<KemWithKdf<EcdhKemUncompressed<NistP521>, CombinerAllPubKeys, HpkeKemKdfP521HkdfSha512, U64>, HpkeKeyGenKdfP521HkdfSha5122, HpkeKeyGenKdfP521HkdfSha5122>;
+    pub type HpkeKemP521HkdfSha512 = HpkeKemWrapper<EcdhKemUncompressed<NistP521>>;
+    impl KemParams for HpkeKemP521HkdfSha512 { 
+        type KemId = kem_id::DhKemP521HkdfSha512; 
+        const IS_AUTH: bool = false;
+        type OutputSize = U64; 
+        type KeyGenFromSeed = TwoStageEcKeyGen<Hkdf<Sha512>, Self::KemId, 0x01>;
+        type EncapsulateFromSeed = TwoStageEcKeyGen<Hkdf<Sha512>, Self::KemId, 0x01>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha512>, Self::KemId>;
+    }
     
     /// Implementation of a KEM using Nist P521 key agreement with a HKDF-SHA512 key derivation function
-    pub type HpkeAuthKemP521HkdfSha512 = HpkeEcdhAuthKem<NistP521, HpkeKemKdfP521HkdfSha512,U64, HpkeEcKeyGen<HpkeKeyGenKdfP521HkdfSha512>>;
-    impl KemId for HpkeAuthKemP521HkdfSha512 { type KemType = kem_id::DhKemP521HkdfSha512; const IS_AUTH: bool = true;}
+    //pub type HpkeAuthKemP521HkdfSha512 = HpkeEcdhAuthKem<NistP521, HpkeKemKdfP521HkdfSha512,U64, HpkeEcKeyGen<HpkeKeyGenKdfP521HkdfSha512>>;
+    //pub type HpkeAuthKemP521HkdfSha512 = HpkeKemWrapper<KemAuthWithKdf<EcdhAuthKemUncompressed<NistP521>, CombinerAllPubKeys, HpkeKemKdfP521HkdfSha512, U64>, HpkeKeyGenKdfP521HkdfSha5122, HpkeKeyGenKdfP521HkdfSha5122>;
+    pub type HpkeAuthKemP521HkdfSha512 = HpkeKemWrapper<EcdhAuthKemUncompressed<NistP521>>;
+    impl KemParams for HpkeAuthKemP521HkdfSha512 { 
+        type KemId = kem_id::DhKemP521HkdfSha512; 
+        const IS_AUTH: bool = true;
+        type OutputSize = U64; 
+        type KeyGenFromSeed = TwoStageEcKeyGen<Hkdf<Sha512>, Self::KemId, 0x01>;
+        type EncapsulateFromSeed = TwoStageEcKeyGen<Hkdf<Sha512>, Self::KemId, 0x01>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha512>, Self::KemId>;
+    }
 }
 
 
@@ -145,29 +235,57 @@ pub mod p521_kems {
 /// 
 #[cfg(all(feature = "rustcrypto-k256"))]
 pub mod k256_kems {
+    use k256::Secp256k1;
     use super::*;
+
     // KDF based on HKDF with Sha256 with a diversion id
     //type HpkeKemKdfSecP256k1HkdfSha256 = HpkeLabelledKdf<Hkdf<sha2::Sha256>, HpkeKemLabel<kem_id::DhKemSecP256k1HkdfSha256>>;
 
-    pub type HpkeKemKdfSecP256k1HkdfSha256 = KdfForKemUsingHkdf<Sha256, kem_id::DhKemSecP256k1HkdfSha256>;
+    //pub type HpkeKemKdfSecP256k1HkdfSha256 = KdfForKemUsingHkdf<Sha256, kem_id::DhKemSecP256k1HkdfSha256>;
      /// Kdf designed for use within a key generation function, with diversification data specific to use with P-521
-    pub type HpkeKeyGenKdfSecP256k1HkdfSha256 = KdfForKeyGenUsingHkdf::<Sha256, kem_id::DhKemSecP256k1HkdfSha256>;
+    //pub type HpkeKeyGenKdfSecP256k1HkdfSha256 = KdfForKeyGenUsingHkdf::<Sha256, kem_id::DhKemSecP256k1HkdfSha256>;
+    //pub type HpkeKeyGenKdfSecP256k1HkdfSha2562 = EcGenKdf<Secp256k1, KdfForKeyGenUsingHkdf::<Sha256, kem_id::DhKemSecP256k1HkdfSha256>>;
 
     /// Implementation of a KEM using SecP256k1 curve with a HKDF-SHA256 key derivation function 
-    pub type HpkeKemSecP256k1HkdfSha256 = HpkeEcdhKem<k256::Secp256k1, HpkeKemKdfSecP256k1HkdfSha256, U32, HpkeEcKeyGen<HpkeKeyGenKdfSecP256k1HkdfSha256>>;
-    impl KemId for HpkeKemSecP256k1HkdfSha256 { type KemType = kem_id::DhKemSecP256k1HkdfSha256; const IS_AUTH: bool = false;}
+    //pub type HpkeKemSecP256k1HkdfSha256 = HpkeEcdhKem<k256::Secp256k1, HpkeKemKdfSecP256k1HkdfSha256, U32, HpkeEcKeyGen<HpkeKeyGenKdfSecP256k1HkdfSha256>>;
+    //pub type HpkeKemSecP256k1HkdfSha256 = HpkeKemWrapper<KemWithKdf<EcdhKemUncompressed<Secp256k1>, CombinerAllPubKeys, HpkeKemKdfSecP256k1HkdfSha256, U32>, HpkeKeyGenKdfSecP256k1HkdfSha2562, HpkeKeyGenKdfSecP256k1HkdfSha2562>;
+    pub type HpkeKemSecP256k1HkdfSha256 = HpkeKemWrapper<EcdhKemUncompressed<Secp256k1>>;
+    impl KemParams for HpkeKemSecP256k1HkdfSha256 { 
+        type KemId = kem_id::DhKemSecP256k1HkdfSha256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = TwoStageEcKeyGen<Hkdf<Sha256>, Self::KemId, 0xFF>;
+        type EncapsulateFromSeed = TwoStageEcKeyGen<Hkdf<Sha256>, Self::KemId, 0xFF>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha256>, Self::KemId>;
+    }
 
     /// Implementation of an authenticated KEM using SecP256k1 curve with a HKDF-SHA256 key derivation function 
-    pub type HpkeAuthKemSecP256k1HkdfSha256 = HpkeEcdhAuthKem<k256::Secp256k1, HpkeKemKdfSecP256k1HkdfSha256, U32, HpkeEcKeyGen<HpkeKeyGenKdfSecP256k1HkdfSha256>>;
-    impl KemId for HpkeAuthKemSecP256k1HkdfSha256 { type KemType = kem_id::DhKemSecP256k1HkdfSha256; const IS_AUTH: bool = true;}
+    //pub type HpkeAuthKemSecP256k1HkdfSha256 = HpkeEcdhAuthKem<k256::Secp256k1, HpkeKemKdfSecP256k1HkdfSha256, U32, HpkeEcKeyGen<HpkeKeyGenKdfSecP256k1HkdfSha256>>;
+    //pub type HpkeAuthKemSecP256k1HkdfSha256 = HpkeKemWrapper<KemAuthWithKdf<EcdhAuthKemUncompressed<Secp256k1>, CombinerAllPubKeys, HpkeKemKdfSecP256k1HkdfSha256, U32>, HpkeKeyGenKdfSecP256k1HkdfSha2562, HpkeKeyGenKdfSecP256k1HkdfSha2562>;
+    pub type HpkeAuthKemSecP256k1HkdfSha256 = HpkeKemWrapper<EcdhAuthKemUncompressed<Secp256k1>>;
+    impl KemParams for HpkeAuthKemSecP256k1HkdfSha256 { 
+        type KemId = kem_id::DhKemSecP256k1HkdfSha256; 
+        const IS_AUTH: bool = true; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = TwoStageEcKeyGen<Hkdf<Sha256>, Self::KemId, 0xFF>;
+        type EncapsulateFromSeed = TwoStageEcKeyGen<Hkdf<Sha256>, Self::KemId, 0xFF>;
+        type Combiner = TwoStageEcCombiner<Hkdf<Sha256>, Self::KemId>;
+    }
 }
 
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p256", feature="rustcrypto-sha3"))]
-impl crate::KemId for kems::draft_irtf_cfrg_hybrid_kems::HybridKemQsfMlKem768P256 { type KemType = crate::kem_id::QsfKemMlKem768P256; const IS_AUTH: bool = false;}
+// #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p256", feature="rustcrypto-sha3"))]
+// impl crate::KemId for kems::draft_irtf_cfrg_hybrid_kems::HybridKemQsfMlKem768P256 { type KemType = crate::kem_id::QsfKemMlKem768P256; const IS_AUTH: bool = false;}
 #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-x25519", feature="rustcrypto-sha3"))]
-impl crate::KemId for kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519 { type KemType = crate::kem_id::KitchenSinkKemMlKem768X25519; const IS_AUTH: bool = false;}
-#[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p384", feature="rustcrypto-sha3"))]
-impl crate::KemId for kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384 { type KemType = crate::kem_id::QsfKemMlKem1024P384; const IS_AUTH: bool = false;}
+impl crate::KemParams for kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519 { 
+    type KemId = crate::kem_id::KitchenSinkKemMlKem768X25519; 
+    const IS_AUTH: bool = false; 
+    type OutputSize = U32; 
+    type KeyGenFromSeed = PassThroughKdf;
+    type EncapsulateFromSeed = PassThroughKdf;
+    type Combiner = PassThroughKdf;
+}
+// #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p384", feature="rustcrypto-sha3"))]
+// impl crate::KemId for kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384 { type KemType = crate::kem_id::QsfKemMlKem1024P384; const IS_AUTH: bool = false;}
 
 
 ///
@@ -179,7 +297,7 @@ pub mod sha2_kdfs {
     
     //pub type LabelledTkdf1<M,L> = Tkdf<LabelledExtract::<Ktf1<M>,L>, LabelledExpand::<Kpf1<M,u8>,L>>;
 
-    pub type HpkeTwoStepHkdf<D> = crate::hpke_kdf::HpkeTwoStageKdf<kdfs::rfc5869_hkdf::Hkdf<D>>;
+    pub type HpkeTwoStepHkdf<D> = HpkeTwoStageKdf<kdfs::rfc5869_hkdf::Hkdf<D>>;
     //pub type HpkeTwoStepHkdf<D> = crate::hpke_kdf::HpkeTwoStageKdf<LabelledTkdf1<HmacReset<D>,LabelHpkeV1>>;
 
     /// Two step KDF used for HPKE based upon HKDF-Sha256
@@ -352,27 +470,38 @@ pub type HpkeIesX448Sha512Aes256Gcm = HpkeIes<x448_kems::HpkeKemX448HkdfSha512, 
 #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-x25519", feature = "rustcrypto-aes", feature = "rustcrypto-sha2", feature = "rustcrypto-sha3"))]
 pub mod draft_ietf_xwing {
 
+    use crate::hpke_kem_wrapper::HpkeKemWrapper;
+    use kdfs::iso11770_6::Okdf1;
+    use sha3::*;
     use super::*;
-    use kems::{x25519kem::{X25519Capsulator}};
+    use kems::{x25519kem::{X25519Kem}};
 
-    type KeyGenKdf = draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::Xwing>;
+    //type KeyGenKdf = draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::Xwing>;
     
 
     /// This variation modifies default XWing by adding an additional hpke specific key derivation step during key generation from seed
-    pub type HpkeXwingMlKem768X25519 = HybridKem::<
-            MlKemWrapper<ml_kem::MlKem768>,
-            X25519Capsulator<SeedAsScalar>,
-            QsfCombiner<kdfs::iso11770_6::Okdf1::<sha3::Sha3_256>, LabelXWing>, 
-            DeriveExpandSeed<U32, shake::Shake256, KeyGenKdf>>;
-            //KeyGenKdfWrapper<ExpandSeed<U32, sha3::Shake256>, KeyGenKdf>>;
-    impl crate::KemId for HpkeXwingMlKem768X25519 { type KemType = kem_id::Xwing; const IS_AUTH: bool = false; }
+    pub type HpkeXwingMlKem768X25519 = HpkeKemWrapper<HybridKem::<
+            MlKem768,
+            X25519Kem,
+            QsfCombiner<Okdf1::<Sha3_256>, LabelXWing>, 
+    >>; 
+    impl crate::KemParams for HpkeXwingMlKem768X25519 { 
+        type KemId = kem_id::Xwing; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
 }
 
 #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-aes"))]
 pub mod apple {
+    #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-sha3"))]
     use crate::hpke_types::draft_ietf_xwing::HpkeXwingMlKem768X25519;
 
     // Implemented by apple 
+    #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-sha3"))]
     pub type HpkeIesXwingMl768X25519Sha256Aes256Gcm = crate::HpkeIes<HpkeXwingMlKem768X25519, super::sha2_kdfs::HpkeHkdfSha256, aes_gcm::Aes256Gcm>;
 }
 
@@ -381,65 +510,139 @@ pub mod apple {
 /// 
 #[cfg(all(feature = "rustcrypto-ml-kem"))]
 pub mod draft_ietf_hpke_pq {
-    use super::*;
     
-    pub type HpkeKemMlKem512 = MlKemWrapper<MlKem512, HpkeKemOneStepKdfKeyDerive::<kem_id::MlKem512>>;
-    impl KemId for HpkeKemMlKem512 { type KemType = kem_id::MlKem512; const IS_AUTH: bool = false; }
 
-    pub type HpkeKemMlKem768 = MlKemWrapper<MlKem768, HpkeKemOneStepKdfKeyDerive::<kem_id::MlKem768>>;
-    impl KemId for HpkeKemMlKem768 { type KemType = kem_id::MlKem768; const IS_AUTH: bool = false; }
+use super::*;
+    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
+use kdfs::iso11770_6::Okdf1;
+#[cfg(all(feature="rustcrypto-p256"))]
+    use kems::draft_irtf_cfrg_concrete_hybrid_kems::ConcreteMlKem768P256;
+    #[cfg(all(feature="rustcrypto-p384"))]
+    use kems::draft_irtf_cfrg_concrete_hybrid_kems::ConcreteMlKem1024P384;
+    
+    use kems::draft_irtf_cfrg_concrete_hybrid_kems::{LabelMlKem768P256, LabelMlKem1024P384};
+#[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
+use kems::hybrid::QsfCombiner2;
+#[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
+use sha3::Sha3_256;
+    
+    //pub type HpkeKemMlKem512 = MlKemWrapper<MlKem512, HpkeKemOneStepKdfKeyDerive::<kem_id::MlKem512>>;
+    //pub type HpkeKemMlKem512 = HpkeKemWrapper<MlKem512, HpkeKemOneStepKdfKeyDerive::<kem_id::MlKem512>, PassThroughKdf>;
+    pub type HpkeKemMlKem512 = HpkeKemWrapper<MlKem512>;
+    impl KemParams for HpkeKemMlKem512 { 
+        type KemId = kem_id::MlKem512; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
 
-    pub type HpkeKemMlKem1024 = MlKemWrapper<MlKem1024, HpkeKemOneStepKdfKeyDerive<kem_id::MlKem1024>>;
-    impl KemId for HpkeKemMlKem1024 { type KemType = kem_id::MlKem1024; const IS_AUTH: bool = false; }
+    //pub type HpkeKemMlKem768 = MlKemWrapper<MlKem768, HpkeKemOneStepKdfKeyDerive::<kem_id::MlKem768>>;
+    //pub type HpkeKemMlKem768 = HpkeKemWrapper<MlKem768, HpkeKemOneStepKdfKeyDerive::<kem_id::MlKem768>, PassThroughKdf>;
+    pub type HpkeKemMlKem768 = HpkeKemWrapper<MlKem768>;
+    impl KemParams for HpkeKemMlKem768 { 
+        type KemId = kem_id::MlKem768; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
 
-    impl KemId for ConcreteMlKem768P256 { type KemType = kem_id::QsfKemMlKem768P256Shake256Sha3256; const IS_AUTH: bool = false; }
-    impl KemId for ConcreteMlKem1024P384 { type KemType = kem_id::QsfKemMlKem1024P384Shake256Sha3256; const IS_AUTH: bool = false; }
+    //pub type HpkeKemMlKem1024 = MlKemWrapper<MlKem1024, HpkeKemOneStepKdfKeyDerive<kem_id::MlKem1024>>;
+    //pub type HpkeKemMlKem1024 = HpkeKemWrapper<MlKem1024, HpkeKemOneStepKdfKeyDerive<kem_id::MlKem1024>, PassThroughKdf>;
+    pub type HpkeKemMlKem1024 = HpkeKemWrapper<MlKem1024>;
+    impl KemParams for HpkeKemMlKem1024 { 
+        type KemId = kem_id::MlKem1024; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
+
+    #[cfg(all(feature="rustcrypto-p256"))]
+    impl KemParams for ConcreteMlKem768P256 { 
+        type KemId = kem_id::QsfKemMlKem768P256Shake256Sha3256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
+    #[cfg(all(feature="rustcrypto-p384"))]
+    impl KemParams for ConcreteMlKem1024P384 {
+        type KemId = kem_id::QsfKemMlKem1024P384Shake256Sha3256;
+        const IS_AUTH: bool = false;
+        type OutputSize = U32;
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
     
 
     /// HPKE using ML-KEM 768, Nist P256 and a Sha3 based combiner, similar to ConcreteMlKem768P256 except it
     /// has an additional step during the derive from seed step
     #[cfg(all(feature="rustcrypto-p256", feature="rustcrypto-sha3"))]
-    pub type HpkeConcreteMlKem768P256 = HybridKem::<
-            MlKemWrapper<ml_kem::MlKem768>,
-            EcdhKemUncompressed<p256::NistP256,SeedAsScalar>,
-            //QsfCombiner<kdfs::iso11770_6::Okdf3::<sha3::Sha3_256, kdfs::u0>, LabelMlKem768P256>, 
+    pub type HpkeConcreteMlKem768P256 = HpkeKemWrapper<HybridKem::<
+            MlKem768,
+            EcdhKemUncompressed<p256::NistP256>,
             QsfCombiner<kdfs::iso11770_6::Okdf1::<sha3::Sha3_256>, LabelMlKem768P256>, 
-            DeriveExpandSeed<U32, Shake256, HpkeKemOneStepKdfKeyDerive::<kem_id::QsfKemMlKem768P256Shake256Sha3256>>>;
-    impl KemId for HpkeConcreteMlKem768P256 { type KemType = kem_id::QsfKemMlKem768P256Shake256Sha3256; const IS_AUTH: bool = false; }
+    >>;
+    
+    #[cfg(all(feature="rustcrypto-p256", feature="rustcrypto-sha3"))]
+    impl KemParams for HpkeConcreteMlKem768P256 { 
+        type KemId = kem_id::QsfKemMlKem768P256Shake256Sha3256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
     
     /// HPKE using ML-KEM 768, Nist P384 curve and a Sha3 based combiner
     #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3"))]
-    pub type HpkeConcreteMlKem1024P384 = HybridKem::<
-            MlKemWrapper<ml_kem::MlKem1024>,
-            EcdhKemUncompressed<p384::NistP384,SeedAsScalar>,
-            //QsfCombiner<kdfs::iso11770_6::Okdf3::<sha3::Sha3_256, kdfs::u0>, LabelMlKem1024P384>, 
+    pub type HpkeConcreteMlKem1024P384 = HpkeKemWrapper<HybridKem::<
+            MlKem1024,
+            EcdhKemUncompressed<p384::NistP384>,
             QsfCombiner<kdfs::iso11770_6::Okdf1::<sha3::Sha3_256>, LabelMlKem1024P384>, 
-            DeriveExpandSeed<U32, Shake256, HpkeKemOneStepKdfKeyDerive::<kem_id::QsfKemMlKem1024P384Shake256Sha3256>>>;
-    impl KemId for HpkeConcreteMlKem1024P384 { type KemType = kem_id::QsfKemMlKem1024P384Shake256Sha3256; const IS_AUTH: bool = false; }
+    >>;
+    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3"))]
+    impl KemParams for HpkeConcreteMlKem1024P384 { 
+        type KemId = kem_id::QsfKemMlKem1024P384Shake256Sha3256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
     
 
-    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3"))]
-    pub type HpkeKemQsfMlKem1024P384 = kems::hybrid::HybridKem::<
-            MlKemWrapper<ml_kem::MlKem1024>,
-            HpkeEcdhKem<p384::NistP384, p384_kems::HpkeKemKdfP384HkdfSha384, U48, SeedAsScalar>,
-            kems::hybrid::QsfCombiner2<kdfs::iso11770_6::Okdf1::<sha3::Sha3_256>, kems::draft_ietf_hpke_pq::QsfLabelP384MlKem1024>,
-            kems::hybrid::DeriveExpandSeed<U32, shake::Shake256, HpkeKemOneStepKdfKeyDerive::<kem_id::QsfKemMlKem1024P384Shake256Sha3256>>>;
-    
-    impl KemId for HpkeKemQsfMlKem1024P384 { type KemType = kem_id::QsfKemMlKem1024P384Shake256Sha3256; const IS_AUTH: bool = false; }
-    
-    
+    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
+    pub type HpkeKemQsfMlKem1024P384 = HpkeKemWrapper<HybridKem::<
+            MlKem1024,
+            EcdhKemUncompressed<p384::NistP384>,
+            QsfCombiner2<Okdf1::<Sha3_256>, kems::draft_ietf_hpke_pq::QsfLabelP384MlKem1024>,
+    >>;
+    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
+    impl KemParams for HpkeKemQsfMlKem1024P384 { 
+        type KemId = kem_id::QsfKemMlKem1024P384Shake256Sha3256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
+        
 
     #[cfg(all(feature="rustcrypto-x25519", feature = "rustcrypto-aes", feature = "rustcrypto-sha2", feature = "rustcrypto-sha3"))]
     pub type HpkeIesKitchenSinkMl768X25519Sha256Aes128Gcm = HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorKitchenSinkMlKem768X25519, sha2_kdfs::HpkeHkdfSha256, aes_gcm::Aes128Gcm>;
 
-    #[cfg(all(feature = "rustcrypto-p384", feature = "rustcrypto-aes", feature = "rustcrypto-sha2", feature = "rustcrypto-sha3"))]
-    pub type HpkeIesQsfMl1024P384Sha256Aes128Gcm = HpkeIes<kems::draft_irtf_cfrg_hybrid_kems::HybridCapsulatorQsfMlKem1024P384, sha2_kdfs::HpkeHkdfSha256, aes_gcm::Aes128Gcm >;
-
-    
     //pub type HpkeKemOneStepKdf2<I> = crate::hpke_kdf::HpkeKemOneStepKdf<sha3::Shake256, I>;
     //pub type HpkeKemOneStepKdfKeyDerive<I> = crate::hpke_kdf::LabelledXofKdf::<sha3::Shake256, LabelHpkeV1, HpkeKemLabelKeyDerive<I>>;
     //pub type HpkeKemOneStepKdfKeyDerive<I> = OutLenKdfWrapper2::<crate::hpke_kdf::LabelledXofKdf::<shake::Shake256, LabelHpkeV1, LabelKem<I>, LabelKeyDerive>>;
-    pub type HpkeKemOneStepKdfKeyDerive<I> = OutLenKdfWrapper2::<LabelledKdf2<LabelledKdf2<LabelledKdf2<shake::Shake256, LabelHpkeV1>, LabelKem<I>>, LabelKeyDerive>>;
+    
     
     // v4, A.1.  ML-KEM-512, HKDF-SHA256, AES-128-GCM
     #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-aes", feature="rustcrypto-sha2"))]
@@ -470,31 +673,38 @@ pub mod draft_ietf_hpke_pq {
 
     // v4 A.4 MLKEM768-P256, HKDF-SHA256, AES-128-GCM
     //pub type HpkeIesMlKem768P256HkdfSha256Aes256Gcm = HpkeIes::<ConcreteMlKem768P256, HpkeHkdfSha256, aes_gcm::Aes128Gcm, draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::QsfKemMlKem768P256Shake256Sha3256>>;
+    #[cfg(all(feature="rustcrypto-p256", feature="rustcrypto-sha3"))]
     pub type HpkeIesMlKem768P256HkdfSha256Aes128Gcm = HpkeIes::<HpkeConcreteMlKem768P256, sha2_kdfs::HpkeHkdfSha256, aes_gcm::Aes128Gcm>;
 
     // v4, A.5. MLKEM768-X25519, HKDF-SHA256, ChaCha20Poly1305
     //pub type HpkeIesMlKem768X25519Shake128ChaCha20Poly1305 = HpkeIes::<XwingMlKem768X25519, super::sha2_kdfs::HpkeHkdfSha256, chacha20poly1305::ChaCha20Poly1305, hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::Xwing>>;
+    #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-sha3"))]
     pub type HpkeIesMlKem768X25519Shake128ChaCha20Poly1305 = HpkeIes::<draft_ietf_xwing::HpkeXwingMlKem768X25519, sha2_kdfs::HpkeHkdfSha256, chacha20poly1305::ChaCha20Poly1305>;
 
     // v4, A.6. MLKEM1024+P384, HKDF-384, AES-256-GCM
     //pub type HpkeIesMlKem1024P384HkdfSha256Aes256Gcm = HpkeIes::<ConcreteMlKem1024P384, super::sha2_kdfs::HpkeHkdfSha384, aes_gcm::Aes256Gcm, hpke_types::draft_ietf_hpke_pq::HpkeKemOneStepKdfKeyDerive::<kem_id::QsfKemMlKem1024P384Shake256Sha3256>>;
+    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
     pub type HpkeIesMlKem1024P384HkdfSha256Aes256Gcm = HpkeIes::<HpkeConcreteMlKem1024P384, sha2_kdfs::HpkeHkdfSha384, aes_gcm::Aes256Gcm>;
 
     // v3 A.6.  QSF-P384-MLKEM1024, Unknown KDF, AES-256-GCM
-    #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
+    #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-aes", feature="rustcrypto-sha2"))]
     //pub type HpkeIesMlKem1024P384Shake256Aes256Gcm = HpkeIes::<HpkeKemQsfMlKem1024P384, super::sha3_kdfs::HpkeOneStepKdfShake256, aes_gcm::Aes256Gcm, HpkeKemOneStepKdfKeyDerive::<kem_id::QsfKemMlKem1024P384Shake256Sha3256>>;
     pub type HpkeIesMlKem1024P384Shake256Aes256Gcm<'a> = HpkeIes::<HpkeKemQsfMlKem1024P384, sha3_kdfs::HpkeOneStepKdfShake256, aes_gcm::Aes256Gcm>;
 
     // v4 A.7 DHKEM(P-256, HKDF-SHA256), SHAKE256, AES-128-GCM
+    #[cfg(all(feature="rustcrypto-p256", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
     pub type HpkeIesP256Shake256Aes128Gcm = HpkeIes::<p256_kems::HpkeKemP256HkdfSha256, sha3_kdfs::HpkeOneStepKdfShake128, aes_gcm::Aes128Gcm /*HpkeKemOneStepKdf2::<kem_id::DhKemP256HkdfSha256>*/>;
 
     // v4 A.8 DHKEM(P-384, HKDF-SHA384), SHAKE256, AES-256-GCM
+    #[cfg(all(feature="rustcrypto-p384", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
     pub type HpkeIesP384Shake256Aes256Gcm<'a> = HpkeIes::<p384_kems::HpkeKemP384HkdfSha384, sha3_kdfs::HpkeOneStepKdfShake256, aes_gcm::Aes256Gcm /*HpkeKemOneStepKdf2::<kem_id::DhKemP256HkdfSha256>*/>;
 
     // v4 A.9 DHKEM(X25519, HKDF-SHA256), Unknown KDF, ChaCha20Poly1305
+    #[cfg(all(feature="rustcrypto-x25519", feature="rustcrypto-sha3", feature="rustcrypto-sha2"))]
     pub type HpkeIesX25519TurboShake128ChaCha20Poly1305 = HpkeIes::<x25519_kems::HpkeKemX25519HkdfSha256, sha3_kdfs::HpkeOneStepKdfTurboShake128, chacha20poly1305::ChaCha20Poly1305 /*HpkeKemOneStepKdf2::<kem_id::DhKemP256HkdfSha256>*/>;
 
     // v4 A.10 DHKEM(X448, HKDF-SHA256), TurboShake256, ChaCha20Poly1305
+    #[cfg(all(feature="rustcrypto-x448", feature="rustcrypto-sha3"))]
     pub type HpkeIesX448TurboShake256ChaCha20Poly1305 = HpkeIes::<x448_kems::HpkeKemX448HkdfSha512, sha3_kdfs::HpkeOneStepKdfTurboShake256, chacha20poly1305::ChaCha20Poly1305 /*HpkeKemOneStepKdf2::<kem_id::DhKemP256HkdfSha256>*/>;
 
     // v4 A.11 MLKEM768-P256, SHAKE128, AES-256-GCM
@@ -590,19 +800,64 @@ pub mod draft_ietf_jose_hpke_encrypt {
 #[cfg(all(feature = "rustcrypto-ml-kem", feature="rustcrypto-sha3", feature="rustcrypto-aes"))]
 pub mod draft_ietf_jose_hpke_pq 
 {
-    use aes_gcm::Aes256Gcm;
-    #[cfg(all(feature="rustcrypto-p256"))]
-    use kems::draft_ietf_lamps_pq_composite_kem_07::{HybridKemMlKem768P256Sha3_256, HybridKemMlKem1024P384Sha3_256};
-    use kems::mlkem::{WrappedMlKem768, WrappedMlKem1024};
-    use kems::xwing::XwingMlKem768X25519;
-    use crate::*;
+    use super::*;
     use crate::hpke_types::sha3_kdfs::{ HpkeOneStepKdfShake256};
+    use aes_gcm::Aes256Gcm;
+    
+   
+    #[cfg(all(feature="rustcrypto-p256"))]
+    use kems::draft_ietf_lamps_pq_composite_kem_07::HybridKemMlKem768P256Sha3_256;
+    #[cfg(all(feature="rustcrypto-p384"))]
+    use kems::draft_ietf_lamps_pq_composite_kem_07::HybridKemMlKem1024P384Sha3_256;
+    #[cfg(all(feature="rustcrypto-x25519"))]
+    use kems::xwing::XwingMlKem768X25519;
+    use ml_kem::{MlKem768, MlKem1024};
+    #[cfg(all(feature="rustcrypto-p256"))]
+    use p256::U32;
 
-    impl KemId for HybridKemMlKem768P256Sha3_256 { type KemType = crate::kem_id::QsfKemMlKem768P256Shake256Sha3256; const IS_AUTH: bool = false;}
-    impl KemId for XwingMlKem768X25519 { type KemType = kem_id::Xwing; const IS_AUTH: bool = false;}
-    impl KemId for HybridKemMlKem1024P384Sha3_256 { type KemType = crate::kem_id::QsfKemMlKem1024P384Shake256Sha3256; const IS_AUTH: bool = false;}
-    impl KemId for WrappedMlKem768 { type KemType = crate::kem_id::MlKem768; const IS_AUTH: bool = false;}
-    impl KemId for WrappedMlKem1024 { type KemType = crate::kem_id::MlKem1024; const IS_AUTH: bool = false;}
+    #[cfg(all(feature="rustcrypto-p256"))]
+    impl KemParams for HybridKemMlKem768P256Sha3_256 { 
+        type KemId = crate::kem_id::QsfKemMlKem768P256Shake256Sha3256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
+    #[cfg(all(feature="rustcrypto-x25519"))]
+    impl KemParams for XwingMlKem768X25519 { 
+        type KemId = kem_id::Xwing; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
+    #[cfg(all(feature="rustcrypto-p384"))]
+    impl KemParams for HybridKemMlKem1024P384Sha3_256 { 
+        type KemId = crate::kem_id::QsfKemMlKem1024P384Shake256Sha3256; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
+    impl KemParams for MlKem768 { 
+        type KemId = crate::kem_id::MlKem768; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
+    impl KemParams for MlKem1024 { 
+        type KemId = crate::kem_id::MlKem1024; 
+        const IS_AUTH: bool = false; 
+        type OutputSize = U32; 
+        type KeyGenFromSeed = OneStageSeedDiversify<Shake256,Self::KemId>;
+        type EncapsulateFromSeed = PassThroughKdf;
+        type Combiner = PassThroughKdf;
+    }
 
     /// Cipher suite for JOSE-HPKE in Base Mode that uses the P-256 + ML-KEM-768 Hybrid KEM, the SHAKE256 KDF, and the ChaCha20Poly1305 AEAD.
     #[cfg(all(feature="rustcrypto-p256"))]
@@ -613,9 +868,14 @@ pub mod draft_ietf_jose_hpke_pq
 
     #[cfg(all(feature="rustcrypto-p384"))]
     pub type HPKE10MlKem768P384Aes256 = crate::HpkeIes<HybridKemMlKem1024P384Sha3_256, HpkeOneStepKdfShake256, Aes256Gcm>;
+    #[cfg(all(feature="rustcrypto-p384"))]
+    impl Label for HPKE10MlKem768P384Aes256{const LABEL: &'static[u8] = b"HPKE-10";}
 
-    pub type HPKE12MlKem768Aes256 = crate::HpkeIes<WrappedMlKem768, HpkeOneStepKdfShake256, Aes256Gcm>;
-    pub type HPKE13MlKem1024Aes256 = crate::HpkeIes<WrappedMlKem1024, HpkeOneStepKdfShake256, Aes256Gcm>;
+    pub type HPKE12MlKem768Aes256 = crate::HpkeIes<MlKem768, HpkeOneStepKdfShake256, Aes256Gcm>;
+    impl Label for HPKE12MlKem768Aes256{const LABEL: &'static[u8] = b"HPKE-12";}
+
+    pub type HPKE13MlKem1024Aes256 = crate::HpkeIes<MlKem1024, HpkeOneStepKdfShake256, Aes256Gcm>;
+    impl Label for HPKE13MlKem1024Aes256{const LABEL: &'static[u8] = b"HPKE-13";}
 
 }
 

@@ -23,26 +23,26 @@
 //! assert! ( plaintext_receive == plaintext );
 //! ```
 
-use std::array::TryFromSliceError;
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
 
-use aead::array::typenum::{Diff, Sum};
-use aead::{Aead, KeyInit, KeySizeUser, Nonce, Payload};
-use elliptic_curve::bigint::Encoding;
-use elliptic_curve::{SecretKey, Curve, CurveArithmetic, NonZeroScalar};
-use hpke_kdf::{HpkeKdf, Psk}; 
-use kdfs::{Kdf, KdfFixed, Label, TwoStepKdf};
-use kdfs::hybrid_array::{Array, ArraySize};
-use kems::{Capsulator, Ciphertext, CryptoRngCore, Decapsulate, GenerateDeterministic2, Encapsulate, EncapsulateDeterministic2, FromKey, FromKeys, GenerateDeterministic3};
-use kems::generic_array::GenericArray;
-use kems::generic_array::typenum::{Unsigned};
+use crate::hpke_kdf::{Export, HpkeKdfExporter, LabelKdf};
 
-use crate::hpke_kdf::{LabelKdf};
+use aead::{Aead, KeyInit, KeySizeUser, Nonce, Payload};
+use digest::InvalidLength;
+use digest::typenum::Unsigned;
+
+use hpke_kdf::{HpkeKdf, Psk}; 
+use kdfs::{Kdf, Label};
+use kdfs::hybrid_array::{Array, ArraySize};
+use kem::{Decapsulator, FromSeed, InvalidKey, TryKeyInit, Kem, Encapsulate, TryDecapsulate, Ciphertext};
+use kems::{CryptoRngCore, EncapsulateDeterministic, FromKey, FromKeys};
 
 
 pub mod hpke_types;
 pub mod hpke_kdf;
+//pub mod hpke_kem_wrapper;
+pub mod hpke_kem_wrapper;
 
 #[derive(Debug)]
 pub enum Error 
@@ -62,11 +62,23 @@ impl From<aead::Error> for Error {
 //         return Error::KemError;
 //     }
 // }
+
+pub enum KemVariants {
+    XKeyGenTwoStageKdfOutput,
+    ECKeyGenTwoStageKdfOutput(u8),
+    OneStage,
+}
 /// Defines an associated type which represents the ID of the KEM
 /// HPKE functions retrieve the KemType and use it as part of the key derivation process
-pub trait KemId {
-    type KemType: Unsigned;
+pub trait KemParams {
+    type KemId: Unsigned;
+    type OutputSize: ArraySize;
+    //type Digest: EagerHash;
     const IS_AUTH: bool;
+    //const KEM_VARIANTS: KemVariants = KemVariants::OneStage;
+    type KeyGenFromSeed: Default; // = TwoStageXKeyGen<sha2::Sha256, Self::KemId>;
+    type EncapsulateFromSeed: Default;
+    type Combiner: Default + Kdf<Self::OutputSize>;
 }
 /// Defines an associated type which represents the ID of the AEAD
 /// HPKE functions retrieve the KemType and use it as part of the key derivation process
@@ -96,7 +108,9 @@ pub mod mode_id {
 /// Key Encapsulation Mechanism Identifiers
 /// <https://www.iana.org/assignments/hpke/hpke.xhtml>
 pub mod kem_id {
-    use kems::generic_array::typenum::*;
+    use digest::typenum::{Diff, Sum};
+    use kem::consts::*;
+
     /// ID of KEM using P256 with HKDF(Sha256) RFC 5869
     pub type DhKemP256HkdfSha256 = U16; 
     /// ID of KEM using P384 with HKDF(Sha384) RFC 5869
@@ -149,7 +163,8 @@ pub mod kem_id {
 /// Key Derivation Function Identifiers
 /// <https://www.iana.org/assignments/hpke/hpke.xhtml>
 pub mod kdf_id {
-    use kems::generic_array::typenum::*;
+    use kem::consts::*;
+
     /// ID of HKDF (RFC 5869) using Sha256
     pub type HkdfSha256 = U1; // HKDF from RFC5869
     /// ID of HDKF (RFC 5869) using Sha384
@@ -170,7 +185,9 @@ pub mod kdf_id {
 /// AEAD Identifiers defined in RFC 9180 and used as part of the key derivation function
 /// <https://www.iana.org/assignments/hpke/hpke.xhtml>
 pub mod aead_id {
-    use kems::generic_array::typenum::*;
+    use digest::typenum::Diff;
+use kem::consts::*;
+
     /// AEAID ID for Aes128 GCM as defined in RFC 9180
     pub type Aes128Gcm = U1;
     /// AEAID ID for Aes256 GCM as defined in RFC 9180 
@@ -199,19 +216,10 @@ where A: Aead + KeyInit,
     A::NonceSize: ArraySize,
 {
     /// Create a new context from the shared secret, info and psk fields
-    fn new<K: HpkeKdf, L: Label> (is_auth: bool, shared_secret: &[u8], info: &[u8], psk: Option<Psk> ) -> Result<Self,()>
-    where A::NonceSize: Add<K::LE>,
-        Sum<A::NonceSize, K::LE>: kems::ArraySize,
-        A::KeySize: Add<<A::NonceSize as Add<K::LE>>::Output>,
-        Sum<A::KeySize, Sum<A::NonceSize, K::LE>>: Sub<A::KeySize>,
-        Sum<A::KeySize, Sum<A::NonceSize, K::LE>>: ArraySize,
-        Diff<Sum<A::KeySize, Sum<A::NonceSize, K::LE>>, A::KeySize>: ArraySize,
-        Diff<Sum<A::KeySize, Sum<A::NonceSize, K::LE>>, A::KeySize>: Sub<A::NonceSize, Output=K::LE>,
-        Diff<Diff<Sum<A::KeySize, Sum<A::NonceSize, K::LE>>, A::KeySize>, A::NonceSize>: ArraySize,
-        //<K as HpkeKdf>::K: KdfLabelled,
+    fn new<K: HpkeKdf<A::KeySize, A::NonceSize>, L: Label> (is_auth: bool, shared_secret: &[u8], info: &[u8], psk: Option<Psk> ) -> Self
     {
-        let (cipher_key, base_nonce, _) = K::derive::<A::KeySize, A::NonceSize, K::LE, L>(is_auth, shared_secret, info, psk)?;
-        Ok(HpkeCipherContext{ cipher: A::new(&cipher_key), base_nonce, sequence_number: 0})
+        let (cipher_key, base_nonce, _) = K::derive::<L>(is_auth, shared_secret, info, psk);
+        HpkeCipherContext{ cipher: A::new(&cipher_key), base_nonce, sequence_number: 0}
     }
 
 
@@ -244,38 +252,45 @@ where A: Aead + KeyInit,
 ///
 /// Struct used to hold an exporter secret which is can be used to derive exporter values
 /// 
-pub struct HpkeExportContext<K: HpkeKdf> 
+//pub struct HpkeExportContext<K: HpkeKdf<LK, LN>, LK: ArraySize, LN: ArraySize> 
+pub struct HpkeExportContext<K: HpkeKdf<LK, LN>, LK: ArraySize, LN: ArraySize> 
 {
-    pub exporter_secret: Array::<u8, K::LE>,
+    pub exporter_secret: Array::<u8, K::ExporterSecretSize>,
     //kdf: K,
     label: &'static[u8],
+    phantom1: PhantomData<LK>,
+    phantom2: PhantomData<LN>
 }
 
 ///
-impl<K: HpkeKdf> HpkeExportContext<K> 
+impl<K: HpkeKdf<LK, LN>, LK: ArraySize, LN: ArraySize> HpkeExportContext<K,LK,LN> 
 {
     /// Create a new HpkeExportContext from a shared secret, info and psk
-    fn new<LK: ArraySize, LN: ArraySize, LB: Label>(is_auth: bool, shared_secret: &[u8], info: &[u8], psk: Option<Psk> ) -> Result<Self,()>
-    where LN: Add<LK>,
-        LN: Add<K::LE>,
-        LK: Add<<LN as Add<K::LE>>::Output>, <LK as Add<<LN as Add<K::LE>>::Output>>::Output: Sub<LK>, 
-        <<LK as Add<<LN as Add<K::LE>>::Output>>::Output as Sub<LK>>::Output: Sub<LN, Output=K::LE>,
-        <LN as Add<K::LE>>::Output: kems::ArraySize,
-        <LK as Add<<LN as Add<K::LE>>::Output>>::Output: kems::ArraySize,
-        <<LK as Add<<LN as Add<K::LE>>::Output>>::Output as Sub<LK>>::Output: kems::ArraySize,
-        <<<LK as Add<<LN as Add<K::LE>>::Output>>::Output as Sub<LK>>::Output as Sub<LN>>::Output: kems::ArraySize
+    fn new<LB: Label>(is_auth: bool, shared_secret: &[u8], info: &[u8], psk: Option<Psk> ) -> Self
+    // where LN: Add<LK>,
+    //     LN: Add<K::ExporterSize>,
+    //     LK: Add<<LN as Add<K::ExporterSize>>::Output>, <LK as Add<<LN as Add<K::ExporterSize>>::Output>>::Output: Sub<LK>, 
+    //     <<LK as Add<<LN as Add<K::ExporterSize>>::Output>>::Output as Sub<LK>>::Output: Sub<LN, Output=K::ExporterSize>,
+    //     <LN as Add<K::ExporterSize>>::Output: kems::ArraySize,
+    //     <LK as Add<<LN as Add<K::ExporterSize>>::Output>>::Output: kems::ArraySize,
+        //<<LK as Add<<LN as Add<K::ExporterSize>>::Output>>::Output as Sub<LK>>::Output: kems::ArraySize,
+        //<<<LK as Add<<LN as Add<K::ExporterSize>>::Output>>::Output as Sub<LK>>::Output as Sub<LN>>::Output: kems::ArraySize
     {
-        let (_, _, exporter_secret) = K::derive::<LK,LN,K::LE,LB>(is_auth, shared_secret, info, psk)?;
-        Ok(HpkeExportContext{exporter_secret, label: LB::LABEL})
+        let (_, _, exporter_secret) = K::derive::<LB>(is_auth, shared_secret, info, psk);
+        HpkeExportContext{exporter_secret, label: LB::LABEL, phantom1: PhantomData, phantom2: PhantomData}
     }
 
+ 
+}
+impl<K: HpkeKdf<LK, LN>, LK: ArraySize, LN: ArraySize, L: ArraySize> Export<L> for HpkeExportContext<K,LK,LN> 
+where K: HpkeKdfExporter<L>, //,LE=<K as HpkeKdf<LK,LN>>::ExporterSize>
+{
     /// Derive an export value from the previously calculated export secret and the provided exporter_context
-    pub fn export<'a : 'b,'b,L2: ArraySize>(&'a self, exporter_context: &[u8] ) -> Result<Array<u8, L2>, ()>
+    fn export<'a : 'b,'b>(&'a self, exporter_context: &[u8] ) -> Array<u8, L>
     {
-        K::derive_exported_value::<L2>(&self.exporter_secret, exporter_context, self.label)
+        K::derive_exported_value(&self.exporter_secret, exporter_context, self.label)
     }
 }
-
 
 ///
 /// Factory struct to create new encryptor and decryptors for Hpke
@@ -292,110 +307,128 @@ pub struct HpkeIes <C, K, A: Aead + KeyInit>
     phantom2: PhantomData<K>,
 } 
 
-
+pub trait HpkeIesTypes {
+    type Decryptor;
+    type Encryptor;
+}
+impl <C, K, A> HpkeIesTypes for HpkeIes<C, K, A> 
+where A: Aead + KeyInit,
+    C: Kem,
+{
+    type Decryptor = HpkeDecryptor<C,K,A>;
+    type Encryptor = HpkeEncryptor<C,K,A>;
+}
 
 impl <C, K, A> HpkeIes<C, K, A> 
 where A: Aead + KeyInit,
-    C: Capsulator,
+    C: Kem,
 {
     /// Create a new decryptor using a passed in key decapsulator
-    pub fn decryptor_from_decapsulator (decapsulator: C::Decapsulator) -> HpkeDecryptor<C, K, A>
+    pub fn decryptor_from_decapsulator (decapsulator: C::DecapsulationKey) -> HpkeDecryptor<C, K, A>
     {
         HpkeDecryptor{ decapsulator, phantom1: PhantomData, phantom2: PhantomData }
     }
 
     /// Create a new decryptor using a passed in private key 
-    pub fn decryptor_from_key ( private: <C::Decapsulator as FromKey>::Key) -> HpkeDecryptor<C, K, A>
-    where C::Decapsulator: FromKey
+    pub fn decryptor_from_key ( private: <C::DecapsulationKey as FromKey>::Key) -> HpkeDecryptor<C, K, A>
+    where C::DecapsulationKey: FromKey
     {
-        Self::decryptor_from_decapsulator(C::Decapsulator::from_key(private))
+        Self::decryptor_from_decapsulator(C::DecapsulationKey::from_key(private))
     }
 
     /// Create a new decryptor from a byte representation of a key
-    pub fn decryptor_from_bytes ( private_bytes: &Array<u8, <C::Decapsulator as KeySizeUser>::KeySize>) -> HpkeDecryptor<C, K, A>
-    where C::Decapsulator: KeySizeUser + KeyInit,
+    pub fn decryptor_from_bytes ( private_bytes: &Array<u8, <C::DecapsulationKey as KeySizeUser>::KeySize>) -> HpkeDecryptor<C, K, A>
+    where C::DecapsulationKey: KeyInit,
     {
-        Self::decryptor_from_decapsulator(C::Decapsulator::new(private_bytes))
+        Self::decryptor_from_decapsulator(C::DecapsulationKey::new(private_bytes))
     }
-    
-    // / Create a new decryptor from a byte representation of a key
-    pub fn decryptor_from_slice ( private_bytes: &[u8]) -> Result<HpkeDecryptor<C, K, A>, TryFromSliceError>
-    where C::Decapsulator: for<'a> TryFrom<&'a [u8], Error=TryFromSliceError>,
+
+    /// Create a new decryptor from a byte representation of a key
+    pub fn try_decryptor_from_slice ( private_bytes: &[u8]) -> Result<HpkeDecryptor<C, K, A>, InvalidKey>
+    where C::DecapsulationKey: TryKeyInit,
     {
-        Ok(Self::decryptor_from_decapsulator(private_bytes.try_into()?))
+        Ok(Self::decryptor_from_decapsulator(C::DecapsulationKey::new_from_slice(private_bytes)?))
+    }
+
+    /// Create a new decryptor from a byte representation of a key
+    pub fn decryptor_from_slice ( private_bytes: &[u8]) -> Result<HpkeDecryptor<C, K, A>, InvalidLength>
+    where C::DecapsulationKey: KeyInit,
+    {
+        //Ok(Self::decryptor_from_decapsulator(private_bytes.try_into()?))
+        Ok(Self::decryptor_from_decapsulator(C::DecapsulationKey::new_from_slice(private_bytes)?))
     }
 
     /// Create a new encryptor from a key encapsulator
-    pub fn encryptor_from_encapsulator (encapsulator: C::Encapsulator) -> HpkeEncryptor<C, K, A>
+    pub fn encryptor_from_encapsulator (encapsulator: C::EncapsulationKey) -> HpkeEncryptor<C, K, A>
     {
         HpkeEncryptor{ encapsulator, phantom1: PhantomData, phantom2: PhantomData }
     }
 
     /// Create a new encryptor from a public key
-    pub fn encryptor_from_key (key: <C::Encapsulator as FromKey>::Key) -> HpkeEncryptor<C, K, A>
-    where C::Encapsulator: FromKey
+    pub fn encryptor_from_key (key: <C::EncapsulationKey as FromKey>::Key) -> HpkeEncryptor<C, K, A>
+    where C::EncapsulationKey: FromKey
     {
-        Self::encryptor_from_encapsulator(C::Encapsulator::from_key(key))
+        Self::encryptor_from_encapsulator(C::EncapsulationKey::from_key(key))
     }
 
     /// Create a new encryptor for a byte array representing a public key
-    pub fn encryptor_from_bytes ( public_bytes: &Array<u8, <C::Encapsulator as KeySizeUser>::KeySize>) -> HpkeEncryptor<C, K, A, >
-    where <C as Capsulator>::Encapsulator: KeySizeUser + KeyInit,
+    pub fn encryptor_from_bytes ( public_bytes: &Array<u8, <C::EncapsulationKey as KeySizeUser>::KeySize>) -> HpkeEncryptor<C, K, A, >
+    where <C as Kem>::EncapsulationKey: TryKeyInit,
     {
-        Self::encryptor_from_encapsulator(C::Encapsulator::new(public_bytes))
+        Self::encryptor_from_encapsulator(<C::EncapsulationKey as TryKeyInit>::new(public_bytes).unwrap())
     }
 
     pub fn encryptor_from_slice ( public_bytes: &[u8]) -> HpkeEncryptor<C, K, A, >
-    where <C as Capsulator>::Encapsulator: for<'a> TryFrom<&'a [u8]>,
+    where <C as Kem>::EncapsulationKey: for<'a> TryFrom<&'a [u8]>,
     {
-        let Ok(encapsulator) = C::Encapsulator::try_from(public_bytes) else { panic! ( "UNhandled")};
+        let Ok(encapsulator) = C::EncapsulationKey::try_from(public_bytes) else { panic! ( "UNhandled")};
         Self::encryptor_from_encapsulator(encapsulator)
     }
 
     /// Create a new authenticated encryptor from a key encapsulator    
-    pub fn auth_encryptor_from_encapsulator (encapsulator: C::Encapsulator) -> HpkeEncryptor<C, K, A>
+    pub fn auth_encryptor_from_encapsulator (encapsulator: C::EncapsulationKey) -> HpkeEncryptor<C, K, A>
     {
         HpkeEncryptor{ encapsulator, phantom1: PhantomData, phantom2: PhantomData }
     }
 
     /// Create a new authenticated encryptor from a pair of keys
-    pub fn auth_encryptor_from_keys (recipient_public: <C::Encapsulator as FromKeys>::PublicKey, 
-                                sender_private: <C::Encapsulator as FromKeys>::PrivateKey) -> HpkeEncryptor<C, K, A >
-    where C::Encapsulator: FromKeys
+    pub fn auth_encryptor_from_keys (recipient_public: <C::EncapsulationKey as FromKeys>::PublicKey, 
+                                sender_private: <C::EncapsulationKey as FromKeys>::PrivateKey) -> HpkeEncryptor<C, K, A >
+    where C::EncapsulationKey: FromKeys
     {
-        Self::auth_encryptor_from_encapsulator(C::Encapsulator::from_keys(recipient_public, sender_private))
+        Self::auth_encryptor_from_encapsulator(C::EncapsulationKey::from_keys(recipient_public, sender_private))
     }
 
     /// Create a new authenticated decryptor from an existing key decapsulator
-    pub fn auth_decryptor_from_decapsulator (decapsulator: C::Decapsulator) -> HpkeDecryptor<C, K, A>
+    pub fn auth_decryptor_from_decapsulator (decapsulator: C::DecapsulationKey) -> HpkeDecryptor<C, K, A>
     {
         HpkeDecryptor{ decapsulator, phantom1: PhantomData, phantom2: PhantomData }
     }
     
     /// Create a new authenticated decryptor from a pair of keys
-    pub fn auth_decryptor_from_keys ( recipient_private: <C::Decapsulator as FromKeys>::PrivateKey,
-                                    sender_public: <C::Decapsulator as FromKeys>::PublicKey) -> HpkeDecryptor<C, K, A >
-    where C::Decapsulator: FromKeys
+    pub fn auth_decryptor_from_keys ( recipient_private: <C::DecapsulationKey as FromKeys>::PrivateKey,
+                                    sender_public: <C::DecapsulationKey as FromKeys>::PublicKey) -> HpkeDecryptor<C, K, A >
+    where C::DecapsulationKey: FromKeys
     {
-        Self::auth_decryptor_from_decapsulator(C::Decapsulator::from_keys(sender_public, recipient_private))
+        Self::auth_decryptor_from_decapsulator(C::DecapsulationKey::from_keys(sender_public, recipient_private))
     }
 
     
     /// Generate a new encryptor and decryptor using a random number generator
-    pub fn generate ( rng: &mut impl CryptoRngCore )  -> ( HpkeEncryptor<C, K, A>, HpkeDecryptor<C, K, A>)
-    where C: Capsulator
+    pub fn generate ()  -> ( HpkeEncryptor<C, K, A>, HpkeDecryptor<C, K, A>)
+    where C: Kem
     {
-        let (encapsulator, decapsulator) = C::generate_from_rng(rng);
+        let (decapsulator, encapsulator) = C::generate_keypair();
         (Self::encryptor_from_encapsulator(encapsulator), Self::decryptor_from_decapsulator(decapsulator))
     }
 
     // Derive a new encryptor and decryptor from a seed value
     pub fn derive_pair_from_seed ( seed: &[u8] ) -> Result<( HpkeEncryptor<C, K, A>, HpkeDecryptor<C, K, A>), ()>
-    where C: GenerateDeterministic3, //<Public=Self::Encryptor, Private=Self::Decryptor> + KemId,
-        C: Capsulator<Encapsulator=<C as GenerateDeterministic3>::Public, Decapsulator=<C as GenerateDeterministic3>::Private>,
+    where C: Kem + FromSeed,
     {
         let Ok(seed_as_array) = Array::try_from(seed) else { return Err(())};
-        let (encapsulator, decapsulator) = C::generate_deterministic(&seed_as_array).map_err(|_|())?;
+        
+        let (decapsulator, encapsulator) = C::from_seed(&seed_as_array);
         Ok((Self::encryptor_from_encapsulator(encapsulator), Self::decryptor_from_decapsulator(decapsulator)))
     }
 }
@@ -412,29 +445,34 @@ where A: Aead + KeyInit,
 /// K: A key derivation function used to derive keys and nonces used for performing the symmetric key encryption
 /// A: An AEAD algorithm used to encrypt the main payload
 /// 
-pub struct HpkeDecryptor <C: Capsulator, K, A: Aead + KeyInit> 
+pub struct HpkeDecryptor <C: Kem, K, A: Aead + KeyInit> 
 {
-    decapsulator: C::Decapsulator,
+    decapsulator: C::DecapsulationKey,
     phantom1: PhantomData<A>,
     phantom2: PhantomData<K>,
 } 
 
 impl <C, K, A> HpkeDecryptor <C, K, A>
-where C: Capsulator + KemId,
-    K: HpkeKdf + KdfId,
+where C: Kem + KemParams,
+    K: HpkeKdf<A::KeySize, A::NonceSize> + KdfId,
     A: Aead + KeyInit + AeadId,
-    A::KeySize: Add<K::LE>,
-    A::NonceSize: Add<K::LE>,
-    A::KeySize: Add<<A::NonceSize as Add<K::LE>>::Output>,
-    <A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output: Sub<A::KeySize>,
-    <<A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output as Sub<A::KeySize>>::Output: Sub<A::NonceSize, Output=K::LE>,
-    <A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output: kems::ArraySize,
-    <<A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output as Sub<A::KeySize>>::Output: kems::ArraySize,
-    <A::NonceSize as Add<K::LE>>::Output: kems::ArraySize,
-    <<<A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output as Sub<A::KeySize>>::Output as Sub<A::NonceSize>>::Output: kems::ArraySize,
+    A::KeySize: Add<K::ExporterSecretSize>,
+    A::NonceSize: Add<K::ExporterSecretSize>,
+    A::KeySize: Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>,
+    <A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output: Sub<A::KeySize>,
+    <<A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output as Sub<A::KeySize>>::Output: Sub<A::NonceSize, Output=K::ExporterSecretSize>,
+    <A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output: kems::ArraySize,
+    <<A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output as Sub<A::KeySize>>::Output: kems::ArraySize,
+    <A::NonceSize as Add<K::ExporterSecretSize>>::Output: kems::ArraySize,
+    <<<A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output as Sub<A::KeySize>>::Output as Sub<A::NonceSize>>::Output: kems::ArraySize,
     A::NonceSize: Add<A::KeySize>,
     K: Default
 {
+    pub fn get_encryptor(&self) -> HpkeEncryptor<C,K,A>
+    //where C::DecapsulationKey: GetEncapsulator<Encapsulator=C::EncapsulationKey>
+    {
+        HpkeEncryptor{encapsulator: self.decapsulator.encapsulation_key().clone(), phantom1: PhantomData, phantom2: PhantomData}
+    }
     /// 
     /// Function which accepts encapsulated key (ct), diversification data (inf) and optional pre-shared key (psk).
     /// The function calculates the shared secret from the encapsulated key and the private key stored in the decapsulator, 
@@ -443,16 +481,16 @@ where C: Capsulator + KemId,
     /// 
     pub fn setup_receiver_cipher(
         &self, 
-        ct: &Ciphertext<C>,
+        ct: &ml_kem::kem::Ciphertext<C>, //Ciphertext<C>,
         info: &[u8],
         psk: Option<Psk>,
     ) -> Result<HpkeCipherContext<A>, Error>
     //where <K as HpkeKdf>::K: KdfLabelled
     {
-        let shared_secret = self.decapsulator.decapsulate(ct).map_err(|_|Error::KemError)?;
+        let shared_secret = self.decapsulator.try_decapsulate(ct).map_err(|_|Error::KemError)?;
         //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
         //HpkeCipherContext::new::<K>(&kdf.into(), C::IS_AUTH, shared_secret.as_slice(), info, psk).map_err(|_|Error::KemError)
-        HpkeCipherContext::new::<K, LabelKdf::<C::KemType, K::KdfType, A::AeadType>>( C::IS_AUTH, shared_secret.as_slice(), info, psk).map_err(|_|Error::KemError)
+        Ok(HpkeCipherContext::new::<K, LabelKdf::<C::KemId, K::KdfType, A::AeadType>>( C::IS_AUTH, shared_secret.as_slice(), info, psk))
     }
 
     /// 
@@ -466,13 +504,13 @@ where C: Capsulator + KemId,
         encapsulated_key: &Ciphertext<C>,
         info: &[u8],
         psk: Option<Psk>
-    ) -> Result<HpkeExportContext<K>, Error>
+    ) -> Result<HpkeExportContext<K, A::KeySize, A::NonceSize>, Error>
     //where <K as HpkeKdf>::K: KdfLabelled
     {
-        let shared_secret = self.decapsulator.decapsulate(encapsulated_key).map_err(|_|Error::KemError)?;
+        let shared_secret = self.decapsulator.try_decapsulate(encapsulated_key).map_err(|_|Error::KemError)?;
         //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
         //HpkeExportContext::new::<A::KeySize, A::NonceSize>( kdf.into(), C::IS_AUTH,shared_secret.as_slice(), info, psk).map_err(|_|Error::KemError)
-        HpkeExportContext::new::<A::KeySize, A::NonceSize,LabelKdf::<C::KemType, K::KdfType, A::AeadType>>( C::IS_AUTH,shared_secret.as_slice(), info, psk).map_err(|_|Error::KemError)
+        Ok(HpkeExportContext::new::<LabelKdf::<C::KemId, K::KdfType, A::AeadType>>( C::IS_AUTH,shared_secret.as_slice(), info, psk))
     }
     
     ///
@@ -502,14 +540,16 @@ where C: Capsulator + KemId,
         psk: Option<Psk>,
     ) -> Result<Array<u8,L>, Error>
     //where <K as HpkeKdf>::K: KdfLabelled
+    //where K: HpkeKdfExporter<L>
+    where K: HpkeKdfExporter<L>, //,LE=<K as HpkeKdf<A::KeySize, A::NonceSize>>::ExporterSize>
     {
         let context = self.setup_receiver_export(encapped_key, info, psk)?;
         //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
-        context.export::<L>(exporter_context).map_err(|_|Error::KemError)
+        Ok(context.export(exporter_context))
     }
 
     /// Get a reference to the decapsulator used in this decryptor
-    pub fn get_decapsulator(&self) -> &C::Decapsulator
+    pub fn get_decapsulator(&self) -> &C::DecapsulationKey
     {
         &self.decapsulator
     }
@@ -524,26 +564,26 @@ where C: Capsulator + KemId,
 /// - K: A kdf used to derive keys and nonces used for performing the symmetric key encryption
 /// - A: An AEAD algorithm used to encrypt the main payload
 /// 
-pub struct HpkeEncryptor <C: Capsulator, K, A: Aead + KeyInit> 
+pub struct HpkeEncryptor <C: Kem, K, A: Aead + KeyInit> 
 {
-    pub(crate) encapsulator: C::Encapsulator,
+    pub(crate) encapsulator: C::EncapsulationKey,
     phantom1: PhantomData<A>,
     phantom2: PhantomData<K>,
 } 
 
-impl <C: Capsulator + KemId, K, A >  HpkeEncryptor <C, K, A >
+impl <C: Kem + KemParams, K, A >  HpkeEncryptor <C, K, A >
 where A: Aead + KeyInit + AeadId,
-    K: HpkeKdf + KdfId, // + Default,
+    K: HpkeKdf<A::KeySize, A::NonceSize> + KdfId, // + Default,
     A: Aead + KeyInit + AeadId,
-    A::KeySize: Add<K::LE>,
-    A::NonceSize: Add<K::LE>,
-    A::KeySize: Add<<A::NonceSize as Add<K::LE>>::Output>,
-    <A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output: Sub<A::KeySize>,
-    <<A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output as Sub<A::KeySize>>::Output: Sub<A::NonceSize, Output=K::LE>,
-    <A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output: kems::ArraySize,
-    <<A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output as Sub<A::KeySize>>::Output: kems::ArraySize,
-    <A::NonceSize as Add<K::LE>>::Output: kems::ArraySize,
-    <<<A::KeySize as Add<<A::NonceSize as Add<K::LE>>::Output>>::Output as Sub<A::KeySize>>::Output as Sub<A::NonceSize>>::Output: kems::ArraySize,
+    A::KeySize: Add<K::ExporterSecretSize>,
+    A::NonceSize: Add<K::ExporterSecretSize>,
+    A::KeySize: Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>,
+    <A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output: Sub<A::KeySize>,
+    <<A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output as Sub<A::KeySize>>::Output: Sub<A::NonceSize, Output=K::ExporterSecretSize>,
+    <A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output: kems::ArraySize,
+    <<A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output as Sub<A::KeySize>>::Output: kems::ArraySize,
+    <A::NonceSize as Add<K::ExporterSecretSize>>::Output: kems::ArraySize,
+    <<<A::KeySize as Add<<A::NonceSize as Add<K::ExporterSecretSize>>::Output>>::Output as Sub<A::KeySize>>::Output as Sub<A::NonceSize>>::Output: kems::ArraySize,
     A::NonceSize: Add<A::KeySize>,
 {
     ///
@@ -552,17 +592,17 @@ where A: Aead + KeyInit + AeadId,
     /// 
     pub fn setup_sender_cipher <R: CryptoRngCore> (
         &self,
-        csprng: &mut R,
+        _csprng: &mut R,
         info: &[u8],
         psk: Option<Psk>, 
     ) -> Result<(Ciphertext<C>, HpkeCipherContext<A>), Error> 
     //where <K as HpkeKdf>::K: KdfLabelled
     //where K: Default
     {
-        let (encapped_key, shared_secret) = self.encapsulator.encapsulate(csprng).map_err(|_|Error::KemError)?;
+        let (encapped_key, shared_secret) = self.encapsulator.encapsulate();
         //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
         //Ok((encapped_key, HpkeCipherContext::new::<K>(&kdf.into(), C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
-        Ok((encapped_key, HpkeCipherContext::new::<K, LabelKdf::<C::KemType, K::KdfType, A::AeadType>>( C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
+        Ok((encapped_key, HpkeCipherContext::new::<K, LabelKdf::<C::KemId, K::KdfType, A::AeadType>>( C::IS_AUTH, &shared_secret, info, psk)))
     }
 
 
@@ -576,17 +616,17 @@ where A: Aead + KeyInit + AeadId,
         info: &[u8],
         psk: Option<Psk>, 
     ) -> Result<(Ciphertext<C>, HpkeCipherContext<A>), Error> 
-    where C::Encapsulator: EncapsulateDeterministic2<GenericArray<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
+    where C::EncapsulationKey: EncapsulateDeterministic //<Array<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
         //<K as HpkeKdf>::K: KdfLabelled,
         //K: Default,
     {
-        let (encapped_key, shared_secret) = self.encapsulator.encapsulate_deterministic(randomness).map_err(|_|Error::KemError)?;
+        let (encapped_key, shared_secret) = self.encapsulator.encapsulate_deterministic(randomness); //.map_err(|_|Error::KemError)?;
         //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
         //Ok((encapped_key, HpkeCipherContext::new(&K::from(kdf), C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
 
         //let kdf = LabelledKdf::<_,LabelKdf::<C::KemType, K::KdfType, A::AeadType>>::from(&<K as HpkeKdf>::K::default());
         //Ok((encapped_key, HpkeCipherContext::new2::<K, LabelledKdf2::<K::K,LabelKdf::<C::KemType, K::KdfType, A::AeadType>>, LabelKdf::<C::KemType, K::KdfType, A::AeadType>>(&K::from(kdf), C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
-        Ok((encapped_key, HpkeCipherContext::new::<K, LabelKdf::<C::KemType, K::KdfType, A::AeadType>>( C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
+        Ok((encapped_key.as_slice().try_into().unwrap(), HpkeCipherContext::new::<K, LabelKdf::<C::KemId, K::KdfType, A::AeadType>>( C::IS_AUTH, &shared_secret, info, psk)))
     }
 
     ///
@@ -595,17 +635,13 @@ where A: Aead + KeyInit + AeadId,
     /// 
     pub fn setup_sender_export <R: CryptoRngCore> (
         &self,
-        csprng: &mut R,
+        _csprng: &mut R,
         info: &[u8],
         psk: Option<Psk>,
-    ) -> Result<(Ciphertext<C>, HpkeExportContext<K>), Error> 
-    //where <K as HpkeKdf>::K: KdfLabelled
-    //where K: Default
+    ) -> Result<(Ciphertext<C>, HpkeExportContext<K, A::KeySize, A::NonceSize>), Error> 
     {
-        let (encapped_key, shared_secret ) = self.encapsulator.encapsulate(csprng).map_err(|_|Error::KemError)?;
-        // let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
-        // Ok((encapped_key, HpkeExportContext::new::<A::KeySize, A::NonceSize>(kdf.into(), C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
-        Ok((encapped_key, HpkeExportContext::new::<A::KeySize, A::NonceSize,LabelKdf::<C::KemType, K::KdfType, A::AeadType>>( C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
+        let (encapped_key, shared_secret ) = self.encapsulator.encapsulate();
+        Ok((encapped_key, HpkeExportContext::new::<LabelKdf::<C::KemId, K::KdfType, A::AeadType>>( C::IS_AUTH, &shared_secret, info, psk)))
     }
 
     ///
@@ -617,15 +653,11 @@ where A: Aead + KeyInit + AeadId,
         randomness: &[u8],
         info: &[u8],
         psk: Option<Psk>,
-    ) -> Result<(Ciphertext<C>, HpkeExportContext<K>), Error> 
-    where C::Encapsulator: EncapsulateDeterministic2<GenericArray<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
-        //<K as HpkeKdf>::K: KdfLabelled
-        //K: Default,
+    ) -> Result<(Ciphertext<C>, HpkeExportContext<K, A::KeySize, A::NonceSize>), Error> 
+    where C::EncapsulationKey: EncapsulateDeterministic,
     {
-        let (encapped_key, shared_secret ) = self.encapsulator.encapsulate_deterministic(randomness).map_err(|_|Error::KemError)?;
-        // let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
-        // Ok((encapped_key, HpkeExportContext::new::<A::KeySize, A::NonceSize>(kdf.into(), C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
-        Ok((encapped_key, HpkeExportContext::new::<A::KeySize, A::NonceSize,LabelKdf::<C::KemType, K::KdfType, A::AeadType>>( C::IS_AUTH, &shared_secret, info, psk).map_err(|_|Error::KdfError)?))
+        let (encapped_key, shared_secret ) = self.encapsulator.encapsulate_deterministic(randomness);
+        Ok((encapped_key.as_slice().try_into().unwrap(), HpkeExportContext::new::<LabelKdf::<C::KemId, K::KdfType, A::AeadType>>( C::IS_AUTH, &shared_secret, info, psk)))
     }
 
     ///
@@ -656,7 +688,7 @@ where A: Aead + KeyInit + AeadId,
         info: &[u8],
         psk: Option<Psk>,
     ) -> Result<(Ciphertext<C>, Vec<u8>), Error> 
-    where C::Encapsulator: EncapsulateDeterministic2<GenericArray<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
+    where C::EncapsulationKey: EncapsulateDeterministic //<Array<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
         //<K as HpkeKdf>::K: KdfLabelled, 
         //K: Default,
     {
@@ -676,9 +708,10 @@ where A: Aead + KeyInit + AeadId,
     ) -> Result<(Ciphertext<C>, Array<u8,L>), Error> 
     //where <K as HpkeKdf>::K: KdfLabelled
     //where K: Default
+    where K: HpkeKdfExporter<L>, //,LE=<K as HpkeKdf<A::KeySize, A::NonceSize>>::ExporterSize>
     {
         let (encapped_key, context) = self.setup_sender_export(csprng, info, psk)?;
-        Ok((encapped_key, context.export::<L>(export_context).map_err(|_|Error::KdfError)?))
+        Ok((encapped_key, context.export(export_context)))
     }
 
     /// 
@@ -691,68 +724,68 @@ where A: Aead + KeyInit + AeadId,
         info: &[u8],
         psk: Option<Psk>,
     ) -> Result<(Ciphertext<C>, Array<u8,L>), Error> 
-    where C::Encapsulator: EncapsulateDeterministic2<GenericArray<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
+    where C::EncapsulationKey: EncapsulateDeterministic, //<Array<u8, C::CiphertextSize>, Array<u8, C::SharedKeySize>>,
+        K: HpkeKdfExporter<L>, //,LE=<K as HpkeKdf<A::KeySize, A::NonceSize>>::ExporterSize>
         //<K as HpkeKdf>::K: KdfLabelled
         //K: Default
     {
         let (encapped_key, context) = self.setup_sender_export_deterministic(randomness, info, psk)?;
         //let kdf = <K as HpkeKdf>::K::new_with_label::<LabelKdf::<C::KemType, K::KdfType, A::AeadType>>();
-        Ok((encapped_key, context.export::<L>(export_context).map_err(|_|Error::KdfError)?))
+        Ok((encapped_key, context.export(export_context)))
     }
 
     ///
     /// Get a reference to the encapsulator
     /// 
-    pub fn get_encapsulator (&self) -> &C::Encapsulator
+    pub fn get_encapsulator (&self) -> &C::EncapsulationKey
     {
         &self.encapsulator
     }
 }
 
 
-///
-/// Implementation of the elliptic curve deterministic key generation function specified in HPKE, RFC9180
-/// 
-pub struct HpkeEcKeyGen<K> (PhantomData<K>);
+//
+// Implementation of the elliptic curve deterministic key generation function specified in HPKE, RFC9180
+// 
+// pub struct HpkeEcKeyGen<K> (PhantomData<K>);
 
-impl<K, C> GenerateDeterministic2<SecretKey<C>> for HpkeEcKeyGen<K>
-where 
-    K: TwoStepKdf, //H: KeyInit + Clone + FixedOutputReset + Mac,
-    //K::Extract: KdfLabelled + KdfFixed,
-    //K::Expand: KdfLabelled,
-    C: Curve + CurveArithmetic,
-    C::FieldBytesSize: ArraySize
-{
-    type SeedSize = C::FieldBytesSize;
-    //type PublicKey = PublicKey<C>;
-    //type Private = SecretKey<C>;
-    type Error = ();
+// impl<K, C> GenerateDeterministic2<SecretKey<C>> for HpkeEcKeyGen<K>
+// where 
+//     K: TwoStepKdf, //H: KeyInit + Clone + FixedOutputReset + Mac,
+//     //K::Extract: KdfLabelled + KdfFixed,
+//     K::Expand: KdfArray<C::FieldBytesSize>,
+//     C: Curve + CurveArithmetic,
+//     C::FieldBytesSize: ArraySize
+// {
+//     type SeedSize = C::FieldBytesSize;
+//     //type PublicKey = PublicKey<C>;
+//     //type Private = SecretKey<C>;
+//     type Error = ();
 
-    //fn generate_deterministic2( ikm: &[u8]) -> Result<(SecretKey<C>, PublicKey<C>), Self::Error> {
-    fn generate_deterministic2( ikm: &[u8]) -> Result<SecretKey<C>, Self::Error> {
+//     //fn generate_deterministic2( ikm: &[u8]) -> Result<(SecretKey<C>, PublicKey<C>), Self::Error> {
+//     fn generate_deterministic2( ikm: &[u8]) -> Result<SecretKey<C>, Self::Error> {
       
-        if ikm.len() != Self::SeedSize::USIZE { return Err(())}
-        let dkp_prk: Array<u8, <K::Extract as KdfFixed>::OutputSize> = K::Extract::derive_secret_other(ikm, &[]).map_err(|_|())?;
-        let order_as_bytes = C::ORDER.to_be_bytes();
-        let bitmask = if order_as_bytes.as_ref().len() == 72 { order_as_bytes.as_ref()[6] } else { order_as_bytes.as_ref()[0] }; //C::ORDER.encode_field_bytes()[0];
+//         if ikm.len() != Self::SeedSize::USIZE { return Err(())}
+//         let dkp_prk: Array<u8, <K::Extract as KdfFixed>::OutputSize> = <K::Extract as KdfFixed>::derive_secret_others_fixed(ikm, None);
+//         let order_as_bytes = C::ORDER.to_be_bytes();
+//         let bitmask = if order_as_bytes.as_ref().len() == 72 { order_as_bytes.as_ref()[6] } else { order_as_bytes.as_ref()[0] }; //C::ORDER.encode_field_bytes()[0];
 
-        let expand_kdf = K::Expand::default(); //new_with_label::<LabelKeyGenCandidate>();
-        for counter in 0u8..255 {
-            //let mut bytes = LabelledExpand::<Kpf1<H, u8>, LabelHpkeV1, LabelKem<KemId>, LabelKeyGenCandidate>::derive_secret_other(&dkp_prk, counter.to_be_bytes().as_ref());
-            if let Ok(mut bytes) = expand_kdf.derive_self_secret_other(&dkp_prk, counter.to_be_bytes().as_ref())
-            {
-                bytes[0] = bytes[0] & bitmask;
+//         let expand_kdf = K::Expand::default(); //new_with_label::<LabelKeyGenCandidate>();
+//         for counter in 0u8..255 {
+//             //let mut bytes = LabelledExpand::<Kpf1<H, u8>, LabelHpkeV1, LabelKem<KemId>, LabelKeyGenCandidate>::derive_secret_other(&dkp_prk, counter.to_be_bytes().as_ref());
+//             let mut bytes = expand_kdf.derive_self_secret_other_array(&dkp_prk, counter.to_be_bytes().as_ref());
 
-                if let Some(sk) = Option::<NonZeroScalar::<C>>::from(NonZeroScalar::<C>::from_repr(bytes)) {
-                    //return Ok((SecretKey::from(sk), PublicKey::from_secret_scalar(&sk)))
-                    return Ok(SecretKey::from(sk))
+//             bytes[0] = bytes[0] & bitmask;
 
-                }
-            }
-        }
-        Err(())
-    }
-}
+//             if let Some(sk) = Option::<NonZeroScalar::<C>>::from(NonZeroScalar::<C>::from_repr(bytes)) {
+//                 //return Ok((SecretKey::from(sk), PublicKey::from_secret_scalar(&sk)))
+//                 return Ok(SecretKey::from(sk))
+
+//             }
+//         }
+//         Err(())
+//     }
+// }
 
 
 
@@ -896,7 +929,7 @@ where
 //     phantom1: PhantomData<A>,
 //     phantom2: PhantomData<K>,
 // } 
-// impl <C: Capsulator, const KEM_ID: u16, K, const KDF_ID: u16, A, const AEAD_ID: u16>  HpkeIesAuthDecryptor <C, KEM_ID, K, KDF_ID, A, AEAD_ID >
+// impl <C: Kem, const KEM_ID: u16, K, const KDF_ID: u16, A, const AEAD_ID: u16>  HpkeIesAuthDecryptor <C, KEM_ID, K, KDF_ID, A, AEAD_ID >
 // where A: Aead + KeyInit,
 //     K: TwoStepKdf,
 // {
@@ -913,7 +946,7 @@ where
 //         //sender_pubkey: &EK::SenderPublicKey,
 //         psk: Option<Psk>,
 //     ) -> Result<HpkeCipherContext<A>, Error>
-//     where C: AuthDecapsulator<EK>
+//     where C: AuthDecapsulationKey<EK>
 //     {
 //         //let shared_secret = self.capsulator.try_auth_decap(encapped_key, sender_pubkey).unwrap();
 //         let shared_secret = self.capsulator.decapsulate(encapped_key).unwrap();
@@ -934,7 +967,7 @@ where
 //         psk: Option<Psk>,
         
 //     ) -> Result<HpkeExportContext::<K>, Error>
-//     where C: AuthDecapsulator<EK>
+//     where C: AuthDecapsulationKey<EK>
 //     {
 //         let shared_secret = self.capsulator.try_auth_decap(encapped_key, sender_pubkey)?;
 //         return Ok(HpkeExportContext::new::<KEM_ID, KDF_ID, AEAD_ID> (true, shared_secret.as_bytes(), info, psk));
@@ -952,7 +985,7 @@ where
 //         sender_key: &EK::SenderPublicKey,
 //         psk: Option<Psk>,
 //     ) -> Result<Vec<u8>, Error>
-//     where C: AuthDecapsulator<EK> {
+//     where C: AuthDecapsulationKey<EK> {
 //         let mut cipher_context = self.setup_receive_cipher ( encapped_key, info, sender_key, psk)?;
 //         return cipher_context.open(ct);
 //     }
@@ -968,7 +1001,7 @@ where
 //         export_context: &[u8],
 //         psk: Option<Psk>,
 //     ) -> Result<GenericArray<u8,L>, Error> 
-//     where C: AuthDecapsulator<EK>
+//     where C: AuthDecapsulationKey<EK>
 //     {
 //         let context = self.setup_auth_receive_export(encapped_key, info, sender_pubkey, psk)?;
 //         return Ok(context.export(export_context));

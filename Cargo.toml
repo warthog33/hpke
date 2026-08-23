@@ -23,6 +23,8 @@ rustcrypto-chacha20poly1305 = ["dep:chacha20poly1305"]
 [dependencies]
 kdfs = { path = "../kdfs" }
 kems = { path = "../kems" }
+kem = { version = "0.3.0", feature=["getrandom"] }
+
 aead = "0.6.0-rc.0"
 digest = { version="0.11.3", features = ["mac"]}
 elliptic-curve = { version = "0.14.0-rc.13", features = ["ecdh"] }
@@ -62,3 +64,6 @@ serde_json = "1.0.128"
 serde = { version="1.0.149", features = ["derive"]}
 serde_with = { version = "3.0", features = ["base64"] }
 hex-literal = "0.4.1"
+
+[patch.crates-io]
+hybrid-array = { path = "../../hybrid-array-mod" }

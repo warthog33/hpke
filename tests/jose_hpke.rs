@@ -6,7 +6,6 @@ use hpke::hpke_types::HpkeIesP256Sha256Aes128Gcm;
 use hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128;
 use josekit::jwe::JweHeader;
 use kems::{Array};
-use kems::generic_array::GenericArray;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, base64::{Base64, UrlSafe}};
 
@@ -118,8 +117,8 @@ fn test_draft_ietf_jose_hpke_encrypt_integrated_encryption  ()
     assert_eq!(protected.key_id(), Some("G5N__CqMv_kJGieGSFuAugvl0jrQJCZ3yKwVK6sUM4o"));
     assert_eq!(aad, &[0u8;0]);
     
-    let decryptor = HpkeIesP256Sha256Aes128Gcm::decryptor_from_slice(&priv_key_vec).unwrap();
-    let plaintext = decryptor.single_shot_open(GenericArray::from_slice(&encapsulated_key), 
+    let decryptor = HpkeIesP256Sha256Aes128Gcm::try_decryptor_from_slice(&priv_key_vec).unwrap();
+    let plaintext = decryptor.single_shot_open(&encapsulated_key.try_into().unwrap(), 
         &[], Payload{msg: ciphertext.as_slice(), aad: header_base64.as_bytes()}, None).unwrap();
 
     assert_eq! ( plaintext, b"hello \xF0\x9F\x8C\x8E");
@@ -185,8 +184,8 @@ fn test_draft_ietf_jose_hpke_encrypt_key_encryption  ()
 
     println! ("len={}", priv_key_vec.len());
 
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128::decryptor_from_slice(&priv_key_vec).unwrap();
-    let cek = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &encrypted_key, aad: &[] }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128::try_decryptor_from_slice(&priv_key_vec).unwrap();
+    let cek = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &encrypted_key, aad: &[] }, None).unwrap();
 
     let decryptor = aes_gcm::Aes128Gcm::new(&Array::try_from(cek.as_slice()).unwrap());
     decryptor.decrypt_inout_detached(&iv.unwrap().as_slice().try_into().unwrap(), 
@@ -251,8 +250,8 @@ fn test_draft_ietf_jose_hpke_encrypt_key_encryption_2  ()
 
     let recipient_structure = [ b"JOSE-HPKE rcpt".as_slice(), &[0xFF], protected_header.enc.unwrap().as_bytes(), &[0xFF], &[]].concat();
 
-    let decapsulator = HPKE0P256Aes128::decryptor_from_slice(&key.d).unwrap();
-    let cek = decapsulator.single_shot_open(GenericArray::from_slice(&recipient1_header.ek), &recipient_structure, 
+    let decapsulator = HPKE0P256Aes128::try_decryptor_from_slice(&key.d).unwrap();
+    let cek = decapsulator.single_shot_open(&recipient1_header.ek.as_slice().try_into().unwrap(), &recipient_structure, 
             recipient1.encrypted_key.as_slice(), None).unwrap();
     
     let decryptor = aes_gcm::Aes128Gcm::new(cek.as_slice().try_into().unwrap());//&Array::try_from(cek.as_slice()).unwrap());
@@ -308,8 +307,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_1 ()
 
     let aad = [jwe.protected.as_bytes(), b".", jwe.aad.unwrap().as_bytes()].concat();
     
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128::decryptor_from_slice(&key.d).unwrap();
-    let plaintext = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128::try_decryptor_from_slice(&key.d).unwrap();
+    let plaintext = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
 
     assert_eq! ( plaintext, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
@@ -365,8 +364,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_2 ()
     let recipient_structure = [ b"JOSE-HPKE rcpt".as_slice(), b"\xFF", content_encryption_alg.as_bytes() , b"\xFF", recipient_extra_info].concat();
     
     //let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE7P256Aes256::decryptor_from_slice(&key.d).unwrap();
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128::decryptor_from_slice(&key.d).unwrap();
-    let cek = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &recipient_structure, Payload{msg: &encrypted_key, aad: &[] }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE0P256Aes128::try_decryptor_from_slice(&key.d).unwrap();
+    let cek = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &recipient_structure, Payload{msg: &encrypted_key, aad: &[] }, None).unwrap();
 
     let decryptor = aes_gcm::Aes128Gcm::new(&Array::try_from(cek.as_slice()).unwrap());
     decryptor.decrypt_inout_detached(&iv.unwrap().as_slice().try_into().unwrap(), 
@@ -415,8 +414,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_3 ()
 
     let aad = [jwe.protected.as_bytes(), b".", jwe.aad.unwrap().as_bytes()].concat();
     
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE1P384Aes256::decryptor_from_slice(&key.d).unwrap();
-    let plaintext = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE1P384Aes256::try_decryptor_from_slice(&key.d).unwrap();
+    let plaintext = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
 
     assert_eq! ( plaintext, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
@@ -457,8 +456,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_5 ()
 
     let aad = [jwe.protected.as_bytes(), b".", jwe.aad.unwrap().as_bytes()].concat();
     
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE2P521Aes256::decryptor_from_slice(&key.d).unwrap();
-    let plaintext = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE2P521Aes256::try_decryptor_from_slice(&key.d).unwrap();
+    let plaintext = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
 
     assert_eq! ( plaintext, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
@@ -499,8 +498,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_7 ()
 
     let aad = [jwe.protected.as_bytes(), b".", jwe.aad.unwrap().as_bytes()].concat();
     
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE3X25519Aes128::decryptor_from_slice(&key.d).unwrap();
-    let plaintext = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE3X25519Aes128::try_decryptor_from_slice(&key.d).unwrap();
+    let plaintext = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
 
     assert_eq! ( plaintext, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
@@ -540,8 +539,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_9 ()
 
     let aad = [jwe.protected.as_bytes(), b".", jwe.aad.unwrap().as_bytes()].concat();
     
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE4X25519ChaCha20Poly1305::decryptor_from_slice(&key.d).unwrap();
-    let plaintext = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE4X25519ChaCha20Poly1305::try_decryptor_from_slice(&key.d).unwrap();
+    let plaintext = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
 
     assert_eq! ( plaintext, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
@@ -581,8 +580,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_11 ()
 
     let aad = [jwe.protected.as_bytes(), b".", jwe.aad.unwrap().as_bytes()].concat();
     
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE5X448Aes256::decryptor_from_slice(&key.d).unwrap();
-    let plaintext = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE5X448Aes256::try_decryptor_from_slice(&key.d).unwrap();
+    let plaintext = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
 
     assert_eq! ( plaintext, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
@@ -622,8 +621,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_13 ()
 
     let aad = [jwe.protected.as_bytes(), b".", jwe.aad.unwrap().as_bytes()].concat();
     
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE6X448ChaCha20Poly1305::decryptor_from_slice(&key.d).unwrap();
-    let plaintext = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE6X448ChaCha20Poly1305::try_decryptor_from_slice(&key.d).unwrap();
+    let plaintext = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
 
     assert_eq! ( plaintext, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
@@ -666,8 +665,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_15 ()
 
     let aad = [jwe.protected.as_bytes(), b".", jwe.aad.unwrap().as_bytes()].concat();
     
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE7P256Aes256::decryptor_from_slice(&key.d).unwrap();
-    let plaintext = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE7P256Aes256::try_decryptor_from_slice(&key.d).unwrap();
+    let plaintext = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &[], Payload{msg: &jwe.ciphertext, aad: &aad }, None).unwrap();
 
     assert_eq! ( plaintext, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
@@ -722,8 +721,8 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_16 ()
     let recipient_structure = [ b"JOSE-HPKE rcpt".as_slice(), b"\xFF", content_encryption_alg.as_bytes() , b"\xFF", recipient_extra_info].concat();
     
     //let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE7P256Aes256::decryptor_from_slice(&key.d).unwrap();
-    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE7P256Aes256::decryptor_from_slice(&key.d).unwrap();
-    let cek = decapsulator.single_shot_open(GenericArray::from_slice(&encapsulated_key), &recipient_structure, Payload{msg: &encrypted_key, aad: &[] }, None).unwrap();
+    let decapsulator = hpke::hpke_types::draft_ietf_jose_hpke_encrypt::HPKE7P256Aes256::try_decryptor_from_slice(&key.d).unwrap();
+    let cek = decapsulator.single_shot_open(&encapsulated_key.try_into().unwrap(), &recipient_structure, Payload{msg: &encrypted_key, aad: &[] }, None).unwrap();
 
     let decryptor = aes_gcm::Aes256Gcm::new(&Array::try_from(cek.as_slice()).unwrap());
     decryptor.decrypt_inout_detached(&iv.unwrap().as_slice().try_into().unwrap(), 
@@ -732,5 +731,18 @@ fn test_draft_ietf_jose_hpke_encrypt_20_a_16 ()
 
     assert_eq! ( buffer, b"You can trust us to stick with you through thick and thin-to the bitter end. And you can trust us to keep any secret of yours-closer than you keep it yourself. But you cannot trust us to let you face trouble alone, and go off without a word. We are your friends, Frodo.");
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

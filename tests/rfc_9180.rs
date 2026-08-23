@@ -1,26 +1,25 @@
 
-use aead::{Aead, Payload, KeyInit};
+use aead::{Aead, Payload};
 use aead::common::KeyExport;
 use elliptic_curve::{consts::*};
 use elliptic_curve::SecretKey;
 use hex_literal::hex;
 
-use hpke::{kem_id, kdf_id, aead_id, HpkeEcKeyGen};
-use hpke::hpke_kdf::{Psk, HpkeKdf, LabelKdf,KeyGenKdfWrapper};
+use hpke::{kem_id, kdf_id, aead_id};
+use hpke::hpke_kdf::Export;
+use hpke::hpke_kdf::{Psk, HpkeKdf, LabelKdf};
 use hpke::hpke_types::k256_kems::{HpkeAuthKemSecP256k1HkdfSha256, HpkeKemSecP256k1HkdfSha256};
-use hpke::hpke_types::p256_kems::{HpkeKemP256HkdfSha256, HpkeKemKdfP256HkdfSha256, HpkeKeyGenKdfP256HkdfSha256,HpkeAuthKemP256HkdfSha256};
+use hpke::hpke_types::p256_kems::{HpkeKemP256HkdfSha256, HpkeAuthKemP256HkdfSha256};
 use hpke::hpke_types::p521_kems::{HpkeKemP521HkdfSha512, HpkeAuthKemP521HkdfSha512 };
 use hpke::hpke_types::sha2_kdfs::{HpkeHkdfSha256,HpkeHkdfSha512};
-use hpke::hpke_types::x25519_kems::{HpkeKeyGenKdfX25519HkdfSha256, HpkeKemX25519HkdfSha256,HpkeKemKdfX25519HkdfSha256};
+use hpke::hpke_types::x25519_kems::{HpkeAuthKemX25519HkdfSha256, HpkeKemX25519HkdfSha256};
 use hpke::hpke_types::{HpkeAuthIesK256Sha256Aes128Gcm, HpkeAuthIesK256Sha256Aes256Gcm, HpkeAuthIesK256Sha256ChaCha20Poly1305, HpkeIesK256Sha256Aes128Gcm, HpkeIesK256Sha256Aes256Gcm, HpkeIesP256Sha512Aes128Gcm};
 use hpke::hpke_types::{HpkeIesP521Sha512Aes256Gcm,HpkeAuthIesX25519Sha256ExportOnly,HpkeAuthIesP256Sha512Aes128Gcm,HpkeAuthIesP521Sha512Aes256Gcm,HpkeIesX25519Sha256ExportOnly,HpkeIesP256Sha256ChaCha20Poly1305};
-use hpke::hpke_types::{HpkeEcdhKem, HpkeIesP256Sha256Aes128Gcm, HpkeAuthIesX25519Sha256Aes128Gcm, HpkeIesX25519Sha256Aes128Gcm,HpkeIesK256Sha256ChaCha20Poly1305, HpkeIesX25519Sha256ChaCha20Poly1305};
+use hpke::hpke_types::{HpkeIesP256Sha256Aes128Gcm, HpkeAuthIesX25519Sha256Aes128Gcm, HpkeIesX25519Sha256Aes128Gcm,HpkeIesK256Sha256ChaCha20Poly1305, HpkeIesX25519Sha256ChaCha20Poly1305};
 use kdfs::hybrid_array::Array;
 
-use kems::{Decapsulate,FromKeys,Capsulator, GenerateDeterministic2,GenerateDeterministic3, EncapsulateDeterministic2};
-use kems::eckem::{SeedAsScalar,EcUncompressedEncoder, EcdhAuthCapsulator, EcdhAuthCapsulatorUncompressed};
-use kems::kem_with_kdf::{KemAuthWithKdfDecapsulator, KemAuthWithKdfEncapsulator, CombinerAllPubKeys, KemAuthWithKdf};
-use kems::x25519kem::X25519AuthCapsulator;
+use kem::{FromSeed, Kem, TryDecapsulate, TryKeyInit};
+use kems::{KemExtensions, EncapsulateDeterministic, FromKeys};
 
 use p256::NistP256;
 use p521::NistP521;
@@ -50,24 +49,25 @@ fn test_rfc_9180_a_1_1 () {
     let base_nonce = hex!("56d890e5accaaf011cff4b7d");
     let exporter_secret = hex!("45ff1c2e220db587171952c0592d5f5ebe103f1561a2614e38f2ffd47e99e3f8");
 
-    let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::generate_deterministic(&ikmR.into()).unwrap();
+    let (decapsulator,encapsulator) = HpkeKemX25519HkdfSha256::from_seed(&ikmR.into());
     assert_eq! ( encapsulator.to_bytes(), pkRm);
     assert_eq! ( decapsulator.to_bytes(), skRm);
     
     let encapsulator = HpkeKemX25519HkdfSha256::from_bytes_encap(&pkRm.into());
-    let decapsulator = HpkeKemX25519HkdfSha256::from_bytes_decap(&skRm.into());
+    //let decapsulator = HpkeKemX25519HkdfSha256::from_bytes_decap(&skRm.into());
+    //let decapsulator = HpkeKemX25519HkdfSha256::try_from_slice_decap(&ikmR).unwrap();
 
-    let (c0_send, k_send) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
-    assert_eq! ( c0_send, enc.into() );
+    let (c0_send, k_send) = encapsulator.encapsulate_deterministic(&ikmE);
+    assert_eq! ( c0_send, enc);
     assert_eq! ( k_send, shared_secret );
     
-    let k_recv: Array<u8, U32> = decapsulator.decapsulate(&c0_send).unwrap();
+    let k_recv: Array<u8, U32> = decapsulator.try_decapsulate(&c0_send).unwrap();
     assert_eq!( k_recv, shared_secret );
 
     // Derive the keys
 //     let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>().into();
 //     let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U16, U12, U32>( &kdf, false, &shared_secret, &info, None).unwrap();
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U16, U12, U32, LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>( false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>( false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -87,7 +87,7 @@ fn test_rfc_9180_a_1_1 () {
 
     // Single shot
     let (c0_send, ct_send) = encryptor.single_shot_seal_deterministic(&ikmE, Payload{msg: &pt, aad: &aad}, &info, None).unwrap();
-    assert! ( c0_send == enc.into());
+    assert_eq! ( c0_send, enc);
     assert! ( ct_send == &ct );
     let pt_2 = decryptor.single_shot_open(&c0_send, &info, Payload{msg:&ct, aad:&aad}, None ).unwrap();
     assert! ( pt_2 == pt);
@@ -95,7 +95,7 @@ fn test_rfc_9180_a_1_1 () {
     // Dual calls
     let (c0_send2, mut context_send) = encryptor.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
     let ct2 = context_send.seal(Payload{msg: &pt, aad: &aad}).unwrap();
-    assert! ( c0_send2 == enc.into());
+    assert_eq! ( c0_send2, enc);
     assert! ( ct2 == &ct );
     let mut context_recv = decryptor.setup_receiver_cipher(&c0_send, &info, None).unwrap();
     let pt4 = context_recv.open(Payload{msg:&ct, aad:&aad}).unwrap();
@@ -148,38 +148,43 @@ fn test_rfc_9180_a_1_4 () {
     let base_nonce = hex!("99d8b5c54669807e9fc70df1");
     let exporter_secret = hex!("f048d55eacbf60f9c6154bd4021774d1075ebf963c6adc71fa846f183ab2dde6");
 
-    let skRm1:x25519_dalek::StaticSecret = KeyGenKdfWrapper::<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>::generate_deterministic2(&ikmR).unwrap();
+    //let skRm1:x25519_dalek::StaticSecret = KeyGenKdfWrapper::<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>::generate_deterministic2(&ikmR).unwrap();
+    let (skRm1, pkRm1) = HpkeKemX25519HkdfSha256::from_seed(&ikmR.into());
     assert_eq! ( skRm1.to_bytes(), skRm);
-    let pkRm1 = x25519_dalek::PublicKey::from(&skRm1);
+    //let pkRm1 = x25519_dalek::PublicKey::from(&skRm1);
     assert_eq! ( pkRm1.to_bytes(), pkRm);
 
-    let skSm1:x25519_dalek::StaticSecret = KeyGenKdfWrapper::<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>::generate_deterministic2(&ikmS).unwrap();
+    //let skSm1:x25519_dalek::StaticSecret = KeyGenKdfWrapper::<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>::generate_deterministic2(&ikmS).unwrap();
+    let (skSm1, pkSm1) = HpkeKemX25519HkdfSha256::from_seed(&ikmS.into());
     assert_eq! ( skSm1.to_bytes(), skSm);
-    let pkSm1 = x25519_dalek::PublicKey::from(&skSm1);
+    //let pkSm1 = x25519_dalek::PublicKey::from(&skSm1);
     assert_eq! ( pkSm1.to_bytes(), pkSm);
 
-    let skEm1:x25519_dalek::StaticSecret = KeyGenKdfWrapper::<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>::generate_deterministic2(&ikmE).unwrap();
+    //let skEm1:x25519_dalek::StaticSecret = KeyGenKdfWrapper::<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>::generate_deterministic2(&ikmE).unwrap();
+    let (skEm1, pkEm1) = HpkeKemX25519HkdfSha256::from_seed(&ikmE.into());
     assert_eq! ( skEm1.to_bytes(), skEm);
-    let pkEm1 = x25519_dalek::PublicKey::from(&skEm1);
+    //let pkEm1 = x25519_dalek::PublicKey::from(&skEm1);
     assert_eq! ( pkEm1.to_bytes(), pkEm);
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
     // Perform asymmetric key encapsulation and decapsulation
-    let encapsulator = KemAuthWithKdf::<X25519AuthCapsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>>, CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32 >::encap_from_keys(pkRm.into(), skSm.into());
+    //let encapsulator = KemAuthWithKdf::<X25519AuthCapsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>>, CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32 >::encap_from_keys(pkRm.into(), skSm.into());
+        let encapsulator = <HpkeAuthKemX25519HkdfSha256 as Kem>::EncapsulationKey::from_keys(pkRm.into(), skSm.into());
+        
     //let (c0_send, k_send) = encapsulator.encapsulate(&mut pred_rng).unwrap();
-    let (c0_send, k_send) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
-    assert_eq! ( c0_send, enc.into() );
+    let (c0_send, k_send) = encapsulator.encapsulate_deterministic(&ikmE);
+    assert_eq! ( c0_send, enc );
     assert_eq! ( k_send, shared_secret );
     
-    let decapsulator = KemAuthWithKdf::<X25519AuthCapsulator<KeyGenKdfWrapper<SeedAsScalar, HpkeKeyGenKdfX25519HkdfSha256>>, CombinerAllPubKeys, HpkeKemKdfX25519HkdfSha256, U32 >::decap_from_keys(pkSm.into(), skRm.into());
-    let k_recv: Array<u8, U32> = decapsulator.decapsulate(&c0_send).unwrap();
+    let decapsulator = <HpkeAuthKemX25519HkdfSha256 as Kem>::DecapsulationKey::from_keys(pkSm.into(), skRm.into());
+    let k_recv: Array<u8, U32> = decapsulator.try_decapsulate(&c0_send).unwrap();
     assert_eq!( k_recv, shared_secret );
 
     // Derive working keys
     //let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>().into();
     
-    let (key2, nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U16, U12, U32,LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>> ( true, &shared_secret, &info, Some(Psk{id: &psk_id, val: &psk})).unwrap();
+    let (key2, nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>> ( true, &shared_secret, &info, Some(Psk{id: &psk_id, val: &psk}));
     assert! ( key2 == key);
     assert! ( nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -196,7 +201,7 @@ fn test_rfc_9180_a_1_4 () {
     // Single shot technique
     //let mut pred_rng = PredictableRng::new(&skEm);
     let (c0_send, ct_send) = encryptor.single_shot_seal_deterministic(&ikmE, Payload{msg: &pt, aad:&aad}, &info, Some(Psk{val:&psk, id: &psk_id})).unwrap();
-    assert! ( c0_send == enc.into() );
+    assert_eq! ( c0_send, enc );
     assert! ( ct_send == ct );
 
     let pt_2 = decryptor.single_shot_open(&c0_send, &info, Payload{msg:&ct, aad:&aad}, Some(Psk{val:&psk, id:&psk_id}) ).unwrap();
@@ -205,7 +210,7 @@ fn test_rfc_9180_a_1_4 () {
     // Double call technique
     let (c0_send2, mut ctx_send) = encryptor.setup_sender_cipher_deterministic(&ikmE, &info, Some(Psk{val:&psk, id:&psk_id})).unwrap();
     let ct_send2 = ctx_send.seal ( Payload{msg: &pt, aad:&aad} ).unwrap();
-    assert! ( c0_send2 == enc.into());
+    assert_eq! ( c0_send2, enc);
     assert! ( ct_send2 == ct);
     
     let mut ctx_recv = decryptor.setup_receiver_cipher(&c0_send, &info, Some(Psk{val:&psk, id:&psk_id})).unwrap();
@@ -251,30 +256,31 @@ fn test_rfc_9180_a_2_1 () {
     let base_nonce = hex!(" 5c4d98150661b848853b547f");
     let exporter_secret = hex!("a3b010d4994890e2c6968a36f64470d3c824c8f5029942feb11e7a74b2921922");
 
-    let (encapsulator, decapsulator) = HpkeKemX25519HkdfSha256::generate_deterministic(&ikmR.into()).unwrap();
+    let (decapsulator, encapsulator) = HpkeKemX25519HkdfSha256::from_seed(&ikmR.into());
     assert_eq!( encapsulator.to_bytes(), pkRm);
     assert_eq!( decapsulator.to_bytes(), skRm);
 
-    let (encapsulatorE, decapsulatorE) = HpkeKemX25519HkdfSha256::generate_deterministic(&ikmE.into()).unwrap();
+    let (decapsulatorE,encapsulatorE) = HpkeKemX25519HkdfSha256::from_seed(&ikmE.into());
     assert_eq!( encapsulatorE.to_bytes(), pkEm);
     assert_eq!( decapsulatorE.to_bytes(), skEm);
 
     let encapsulator = HpkeKemX25519HkdfSha256::from_bytes_encap(&pkRm.into());
-    let decapsulator = HpkeKemX25519HkdfSha256::from_bytes_decap(&skRm.into());
+    //let decapsulator = HpkeKemX25519HkdfSha256::from_bytes_decap(&skRm.into());
+    //let decapsulator = HpkeKemX25519HkdfSha256::try_from_slice_decap(&ikmR).unwrap();
     
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let (c0_send, k_send) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
-    assert_eq! ( c0_send, enc.into() );
+    let (c0_send, k_send) = encapsulator.encapsulate_deterministic(&ikmE);
+    assert_eq! ( c0_send, enc );
     assert_eq! ( k_send, shared_secret );
 
-    let k_recv: Array<u8, U32> = decapsulator.decapsulate(&c0_send).unwrap();
+    let k_recv: Array<u8, U32> = decapsulator.try_decapsulate(&c0_send).unwrap();
     assert!( k_recv == shared_secret );
 
     // Derive keys
     //let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>().into();
     
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U32, U12, U32,LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>> ( false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>> ( false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -296,7 +302,7 @@ fn test_rfc_9180_a_2_1 () {
     //let mut pred_rng = PredictableRng::new(&skEm);
 
     let (c0_send, ct_send ) = encryptor.single_shot_seal_deterministic(&ikmE, Payload{msg: &pt, aad: &aad}, &info, None).unwrap();
-    assert! ( c0_send == enc.into());
+    assert_eq! ( c0_send, enc);
     assert! ( ct_send == &ct );
 
     let pt_2 = decryptor.single_shot_open(&c0_send, &info, Payload{msg: &ct, aad: &aad}, None).unwrap();
@@ -332,25 +338,26 @@ fn test_rfc_9180_a_3_1 () {
     let base_nonce = hex! ("4e0bc5018beba4bf004cca59");
     let exporter_secret = hex! ("14ad94af484a7ad3ef40e9f3be99ecc6fa9036df9d4920548424df127ee0d99f");
 
-    let (pkrm3, skrm3) = HpkeEcdhKem::<NistP256, HpkeKemKdfP256HkdfSha256, U32, /*SeedAsScalar*/HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>::generate_deterministic(&Array::from(ikmr)).unwrap();
-    assert_eq!(pkrm3.to_bytes().as_slice(), &pkrm );
-    assert_eq!(skrm3.to_bytes().as_slice(), &skrm );
+    //let (skrm3, pkrm3) = HpkeEcdhKem::<NistP256, HpkeKemKdfP256HkdfSha256, U32, /*SeedAsScalar*/HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>::from_seed(&Array::from(ikmr));
+    let (skrm3, pkrm3) = HpkeKemP256HkdfSha256::from_seed(&ikmr.into());
+    assert_eq!(pkrm3.to_bytes(), pkrm );
+    assert_eq!(skrm3.to_bytes(), skrm );
 
-    let (pkem3, skem3) = HpkeKemP256HkdfSha256::generate_deterministic(&Array::from(ikme)).unwrap();
-    assert_eq!(pkem3.to_bytes().as_slice(), &pkem );
-    assert_eq!(skem3.to_bytes().as_slice(), &skem );
+    let (skem3, pkem3 ) = HpkeKemP256HkdfSha256::from_seed(&Array::from(ikme));
+    assert_eq!(pkem3.to_bytes(), pkem );
+    assert_eq!(skem3.to_bytes(), skem );
 
 
     //let mut pred_rng = PredictableRng::new(&skem);
 
-    let encapsulator = <HpkeKemP256HkdfSha256 as Capsulator>::Encapsulator::new(&pkrm.into());
+    let encapsulator = <<HpkeKemP256HkdfSha256 as Kem>::EncapsulationKey as TryKeyInit>::new(&pkrm.into()).unwrap();
     
-    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikme).unwrap();
+    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikme);
     assert! ( c0_calc.as_ref() == enc );
     assert! ( k_calc == shared_secret );
     
     //let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>().into();
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U16, U12, U32,LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>> ( false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::< LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>> ( false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -378,7 +385,7 @@ fn test_rfc_9180_a_3_1 () {
     assert! ( ct_send == &ct );
 
     let (c0_send2, mut ctx_send) = he_encryptor.setup_sender_cipher_deterministic(&ikme, &info, None).unwrap();
-    assert_eq!(c0_send2, enc.into());
+    assert_eq!(c0_send2, enc);
     let ct5 = ctx_send.seal(Payload{msg: &pt, aad: &aad}).unwrap();
     assert_eq!(ct5, ct);
 
@@ -440,11 +447,11 @@ fn test_rfc_9180_a_4_1 () {
             ca61e26d494f4855dff0d0165f27ce57756f7f16baca006539bb8e4518987ba61048
             0ac03efa8");
 
-    let (pkrm3, skrm3) = HpkeKemP256HkdfSha256::generate_deterministic(&Array::from(ikmr)).unwrap();
+    let (skrm3, pkrm3) = HpkeKemP256HkdfSha256::from_seed(&Array::from(ikmr));
     assert_eq!(pkrm3.to_bytes().as_slice(), &pkrm );
     assert_eq!(skrm3.to_bytes().as_slice(), &skrm );
 
-    let (pkem3, skem3) = HpkeKemP256HkdfSha256::generate_deterministic(&Array::from(ikme)).unwrap();
+    let (skem3, pkem3) = HpkeKemP256HkdfSha256::from_seed(&Array::from(ikme));
     assert_eq!(pkem3.to_bytes().as_slice(), &pkem );
     assert_eq!(skem3.to_bytes().as_slice(), &skem );
     
@@ -452,14 +459,14 @@ fn test_rfc_9180_a_4_1 () {
 
     let encapsulator = HpkeKemP256HkdfSha256::try_from_slice_encap(&pkrm).unwrap();
 
-    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikme).unwrap();
-    assert! ( c0_calc == enc.into() );
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikme);
+    assert! ( c0_calc == enc );
     assert! ( k_calc == shared_secret );
 
     // Derive keys
     //let kdf = LabelledTkdf1::<HmacReset<Sha512>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>>().into();
     
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha512::derive::<U16, U12, U64,LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>> ( false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha512::derive::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>> ( false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -521,29 +528,29 @@ fn test_rfc_9180_a_4_2 () {
                 fe4d4352790171ed2b2c4756ad7f5a730ba336c8f1edd0089d8331192058c385bae3
                 9c7cc8b57");
 
-    let (pkrm3, skrm3) = HpkeKemP256HkdfSha256::generate_deterministic(&Array::from(ikmR)).unwrap();
+    let (skrm3, pkrm3 ) = HpkeKemP256HkdfSha256::from_seed(&Array::from(ikmR));
     assert_eq!(pkrm3.to_bytes().as_slice(), &pkRm );
     assert_eq!(skrm3.to_bytes().as_slice(), &skRm );
 
-    let (pkem3, skem3) = HpkeKemP256HkdfSha256::generate_deterministic(&Array::from(ikmE)).unwrap();
+    let (skem3, pkem3 ) = HpkeKemP256HkdfSha256::from_seed(&Array::from(ikmE));
     assert_eq!(pkem3.to_bytes().as_slice(), &pkEm );
     assert_eq!(skem3.to_bytes().as_slice(), &skEm );
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let encapsulator = HpkeKemP256HkdfSha256::from_bytes_encap(&pkRm.into());
-    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
-    assert! ( c0_calc == enc.into() );
+    let encapsulator = HpkeKemP256HkdfSha256::try_from_bytes_encap(&pkRm.into()).unwrap();
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE);
+    assert! ( c0_calc == enc );
     assert! ( k_calc == shared_secret );
 
-    let decapsulator = HpkeKemP256HkdfSha256::from_bytes_decap(&skRm.into());
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let decapsulator = HpkeKemP256HkdfSha256::try_from_slice_decap(&skRm).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert! ( k_calc2 == shared_secret );
 
     // Derive keys
     //let kdf = LabelledTkdf1::<HmacReset<Sha512>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>>().into();
 
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha512::derive::<U16, U12, U64,LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>> ( false, &shared_secret, &info, Some(Psk{id: &psk_id, val: &psk})).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha512::derive::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>> ( false, &shared_secret, &info, Some(Psk{id: &psk_id, val: &psk}));
     assert! ( key2 == key );
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -609,29 +616,31 @@ fn test_rfc_9180_a_4_3 () {
     let exporter_secret = hex!("ca2410672369aae1afd6c2639f4fe34ca36d35410c090608d2924f60def17f91
                                 0d7928575434d7f991b1f19d3e8358b8278ff59ced0d5eed4774cec72e12766e");
 
-    let (pkRm3, skRm3) = HpkeKemP256HkdfSha256::generate_deterministic(&ikmR.into()).unwrap();
+    let (skRm3, pkRm3) = HpkeKemP256HkdfSha256::from_seed(&ikmR.into());
     assert_eq!( pkRm3.to_bytes(), pkRm);
     assert_eq!( skRm3.to_bytes(), skRm);
-    let (pkSm3, skSm3) = HpkeKemP256HkdfSha256::generate_deterministic(&ikmS.into()).unwrap();
+    let (skSm3, pkSm3) = HpkeKemP256HkdfSha256::from_seed(&ikmS.into());
     assert_eq!( pkSm3.to_bytes(), pkSm);
     assert_eq!( skSm3.to_bytes(), skSm);
-    let (pkEm3, skEm3) = HpkeKemP256HkdfSha256::generate_deterministic(&ikmE.into()).unwrap();
+    let (skEm3, pkEm3) = HpkeKemP256HkdfSha256::from_seed(&ikmE.into());
     assert_eq!( pkEm3.to_bytes(), pkEm);
     assert_eq!( skEm3.to_bytes(), skEm);
         
-    let encapsulator = KemAuthWithKdfEncapsulator::<EcdhAuthCapsulatorUncompressed::<_,HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>, CombinerAllPubKeys, HpkeKemKdfP256HkdfSha256, U32>::from_keys(pkRm3.encapsulator.recipient_public, skSm3.decapsulator.recipient_private);
-    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    //let encapsulator = KemAuthWithKdfEncapsulator::<EcdhAuthCapsulatorUncompressed::<_,HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>, CombinerAllPubKeys, HpkeKemKdfP256HkdfSha256, U32>::from_keys(pkRm3.0.as_ref().unwrap().encapsulator.recipient_public, skSm3.decap.decapsulator.recipient_private);
+    let encapsulator = <HpkeAuthKemP256HkdfSha256 as Kem>::EncapsulationKey::from_keys(pkRm3.0.recipient_public, skSm3.decap.recipient_private);
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE);
     assert! ( c0_calc.as_ref() == enc );
     assert! ( k_calc == shared_secret );
 
-    let decapsulator = KemAuthWithKdfDecapsulator::<EcdhAuthCapsulator::<_, EcUncompressedEncoder<NistP256>,HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>, CombinerAllPubKeys, HpkeKemKdfP256HkdfSha256, U32>::from_keys(pkSm3.encapsulator.recipient_public, skRm3.decapsulator.recipient_private);
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    //let decapsulator = KemAuthWithKdfDecapsulator::<EcdhAuthCapsulator::<_, EcUncompressedEncoder<NistP256>,HpkeEcKeyGen<HpkeKeyGenKdfP256HkdfSha256>>, CombinerAllPubKeys, HpkeKemKdfP256HkdfSha256, U32>::from_keys(pkSm3.0.as_ref().unwrap().encapsulator.recipient_public, skRm3.decap.decapsulator.recipient_private);
+    let decapsulator = <HpkeAuthKemP256HkdfSha256 as Kem>::DecapsulationKey::from_keys(pkSm3.0.recipient_public, skRm3.decap.recipient_private);
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert! ( k_calc2 == shared_secret );
 
     // Derive keys
     //let kdf = LabelledTkdf1::<HmacReset<Sha512>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>>().into();
 
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha512::derive::<U16, U12, U64,LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>> (true, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha512::derive::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>> (true, &shared_secret, &info, None);
     assert! ( key2 == key );
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -642,8 +651,11 @@ fn test_rfc_9180_a_4_3 () {
     let _nonce = hex!("ea4fd7a485ee5f1f4b62c1b7");
     let ct = hex!("2480179d880b5f458154b8bfe3c7e8732332de84aabf06fc440f6b31f169e154 157fa9eb44f2fa4d7b38a9236e");
 
-    let encryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_encryptor_from_encapsulator(encapsulator);
-    let decryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_decryptor_from_decapsulator(decapsulator);
+    let (skSm3, pkSm3) = HpkeKemP256HkdfSha256::from_seed(&ikmS.into());
+    let (skRm3, pkRm3) = HpkeKemP256HkdfSha256::from_seed(&ikmR.into());
+    //let encryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_encryptor_from_encapsulator(encapsulator);
+    let encryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_encryptor_from_keys(pkRm3.0.recipient_public, skSm3.decap.recipient_private);
+    let decryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_decryptor_from_keys(skRm3.decap.recipient_private, pkSm3.0.recipient_public);
     
     //let mut pred_rng = PredictableRng::new(&skEm);
 
@@ -694,32 +706,32 @@ fn test_rfc_9180_a_4_4 () {
                 7d8b54e9b1e547244c3602bdd86d5a788a8443befea0a7658002b23f1c96a62a6498
                 6fffc511a");
 
-    let (pkRm3, skRm3) = HpkeKemP256HkdfSha256::generate_deterministic(&ikmR.into()).unwrap();
+    let (skRm3, pkRm3) = HpkeKemP256HkdfSha256::from_seed(&ikmR.into());
     assert_eq!(pkRm3.to_bytes(), pkRm);
     assert_eq!(skRm3.to_bytes(), skRm);
-    let (pkSm3, skSm3) = HpkeKemP256HkdfSha256::generate_deterministic(&ikmS.into()).unwrap();
+    let (skSm3, pkSm3 ) = HpkeKemP256HkdfSha256::from_seed(&ikmS.into());
     assert_eq!(pkSm3.to_bytes(), pkSm);
     assert_eq!(skSm3.to_bytes(), skSm);
-    let (pkEm3, skEm3) = HpkeKemP256HkdfSha256::generate_deterministic(&ikmE.into()).unwrap();
+    let (skEm3, pkEm3) = HpkeKemP256HkdfSha256::from_seed(&ikmE.into());
     assert_eq!(pkEm3.to_bytes(), pkEm);
     assert_eq!(skEm3.to_bytes(), skEm);
 
-    let encapsulator = HpkeAuthKemP256HkdfSha256::encap_from_keys(pkRm3.encapsulator.recipient_public, skSm3.decapsulator.recipient_private.clone());
-    let decapsulator = HpkeAuthKemP256HkdfSha256::decap_from_keys(pkSm3.encapsulator.recipient_public, skRm3.decapsulator.recipient_private.clone());
+    let encapsulator = <HpkeAuthKemP256HkdfSha256 as Kem>::EncapsulationKey::from_keys(pkRm3.0.recipient_public, skSm3.decap.recipient_private.clone());
+    let decapsulator = <HpkeAuthKemP256HkdfSha256 as Kem>::DecapsulationKey::from_keys(pkSm3.0.recipient_public, skRm3.decap.recipient_private.clone());
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE);
     assert! ( c0_calc.as_ref() == enc );
     assert! ( k_calc == shared_secret );
 
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert! ( k_calc2 == shared_secret );
 
     // Derive keys
     //let kdf = LabelledTkdf1::<HmacReset<Sha512>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>>().into();
 
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha512::derive::<U16, U12, U64,LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>> (true, &shared_secret, &info, Some(Psk{val: &psk, id: &psk_id})).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha512::derive::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>> (true, &shared_secret, &info, Some(Psk{val: &psk, id: &psk_id}));
     assert! ( key2 == key );
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -731,8 +743,8 @@ fn test_rfc_9180_a_4_4 () {
     let ct = hex!("840669634db51e28df54f189329c1b727fd303ae413f003020aff5e26276aaa9 10fc4296828cb9d862c2fd7d16");
 
     // Repeat using full hpke functions
-    let he_encryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_encryptor_from_keys(pkRm3.encapsulator.recipient_public, skSm3.decapsulator.recipient_private.clone());
-    let he_decryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_decryptor_from_keys(skRm3.decapsulator.recipient_private, pkSm3.encapsulator.recipient_public);    
+    let he_encryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_encryptor_from_keys(pkRm3.0.recipient_public, skSm3.decap.recipient_private.clone());
+    let he_decryptor = HpkeAuthIesP256Sha512Aes128Gcm::auth_decryptor_from_keys(skRm3.decap.recipient_private, pkSm3.0.recipient_public);    
     
     let (c0_send, ct_send) = he_encryptor.single_shot_seal_deterministic(&ikmE, Payload{msg: &pt, aad: &aad}, &info, Some(Psk{val:&psk, id:&psk_id})).unwrap();
     assert! ( ct_send == ct );
@@ -770,22 +782,22 @@ fn test_rfc_9180_a_5_1 () {
     let base_nonce=hex!("726b4390ed2209809f58c693");
     let exporter_secret=hex!("4f9bd9b3a8db7d7c3a5b9d44fdc1f6e37d5d77689ade5ec44a7242016e6aa205");
 
-    let encapsulator = HpkeKemP256HkdfSha256::from_bytes_encap(&pkrm.into());
-    let decapsulator = HpkeKemP256HkdfSha256::from_bytes_decap(&skrm.into());
+    let encapsulator = HpkeKemP256HkdfSha256::try_from_bytes_encap(&pkrm.into()).unwrap();
+    let decapsulator = HpkeKemP256HkdfSha256::try_from_slice_decap(&skrm).unwrap();
 
     //let mut pred_rng = PredictableRng::new(&skem);
 
-    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikme).unwrap();
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikme);
     assert! ( c0_calc.as_ref() == enc );
     assert! ( k_calc == shared_secret );
 
-    let k_calc3 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc3 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert_eq! ( k_calc3, shared_secret);
 
     // Derive keys
     //let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>().into();
 
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U32, U12, U32, LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>( false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>( false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -806,7 +818,8 @@ fn test_rfc_9180_a_5_1 () {
     let ct= hex!("6469c41c5c81d3aa85432531ecf6460ec945bde1eb428cb2fedf7a29f5a685b4 ccb0d057f03ea2952a27bb458b");
 
     let he_encryptor = HpkeIesP256Sha256ChaCha20Poly1305::encryptor_from_bytes(&pkrm.into());
-    let he_decryptor = HpkeIesP256Sha256ChaCha20Poly1305::decryptor_from_bytes(&skrm.into());
+    //let he_decryptor = HpkeIesP256Sha256ChaCha20Poly1305::try_decryptor_from_bytes(&skrm.into());
+    let he_decryptor = decryptor;
     
     let (c0_send, ct_send) = he_encryptor.single_shot_seal_deterministic(&ikme, aead::Payload{msg:&pt, aad:&aad}, &info, None).unwrap();
     assert! ( c0_send.as_ref() == enc);
@@ -867,28 +880,28 @@ fn test_rfc_9180_a_6_1 () {
             81252d0ee3215388a4455e69086b50b87eb28c169a52f42e71de4ca61c920e7bd24c
             95cc3f992");
 
-    let (encapsulator, decapsulator) = HpkeKemP521HkdfSha512::generate_deterministic(&ikmR.into()).unwrap();
+    let (decapsulator, encapsulator) = HpkeKemP521HkdfSha512::from_seed(&ikmR.into());
     assert_eq! ( decapsulator.to_bytes(), skRm);
     assert_eq! ( encapsulator.to_bytes(), pkRm);
-    let (encapsulatorE, decapsulatorE) = HpkeKemP521HkdfSha512::generate_deterministic(&ikmE.into()).unwrap();
+    let (decapsulatorE, encapsulatorE ) = HpkeKemP521HkdfSha512::from_seed(&ikmE.into());
     assert_eq! ( decapsulatorE.to_bytes(), skEm);
     assert_eq! ( encapsulatorE.to_bytes(), pkEm);
 
-    let encapsulator = HpkeKemP521HkdfSha512::from_bytes_encap(&pkRm.into());
-    let decapsulator = HpkeKemP521HkdfSha512::from_bytes_decap(&skRm.into());
+    let encapsulator = HpkeKemP521HkdfSha512::try_from_bytes_encap(&pkRm.into()).unwrap();
+    let decapsulator = HpkeKemP521HkdfSha512::try_from_slice_decap(&skRm).unwrap();
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE);
     assert! ( c0_calc.as_ref() == enc );
     assert! ( k_calc == shared_secret );
 
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert! ( k_calc2 == shared_secret );
 
     // derive keys
     //let hkdf = LabelledTkdf1::<HmacReset<Sha512>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>().into();
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha512::derive::<U32, U12, U64, LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>(false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha512::derive::<LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>(false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -900,7 +913,7 @@ fn test_rfc_9180_a_6_1 () {
     let ct = hex!("170f8beddfe949b75ef9c387e201baf4132fa7374593dfafa90768788b7b2b20 0aafcc6d80ea4c795a7c5b841a");
 
     let he_encryptor = HpkeIesP521Sha512Aes256Gcm::encryptor_from_bytes(&pkRm.into());
-    let he_decryptor = HpkeIesP521Sha512Aes256Gcm::decryptor_from_bytes(&skRm.into());
+    let he_decryptor = HpkeIesP521Sha512Aes256Gcm::try_decryptor_from_slice(&skRm).unwrap();
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
@@ -973,13 +986,13 @@ fn test_rfc_9180_a_6_3 () {
         a35d7f534089c87c98b4bacd7bbc6276c4002a74085adcd9019fca6139826b529256
         9cfb7fe47");
 
-    let (encapsulator_recv, decapsulator_recv) = HpkeKemP521HkdfSha512::generate_deterministic(&ikmR.into()).unwrap();
-    assert_eq! (encapsulator_recv.to_bytes().as_slice(), pkRm.as_slice());
-    assert_eq! (decapsulator_recv.to_bytes().as_slice(), skRm.as_slice());
+    let (decapsulator_recv, encapsulator_recv) = HpkeKemP521HkdfSha512::from_seed(&ikmR.into());
+    assert_eq! (encapsulator_recv.to_bytes(), pkRm);
+    assert_eq! (decapsulator_recv.to_bytes(), skRm);
 
-    let (encapsulator_send, decapsulator_send) = HpkeKemP521HkdfSha512::generate_deterministic(&ikmS.into()).unwrap();
-    assert_eq! (encapsulator_send.to_bytes().as_slice(), pkSm.as_slice());
-    assert_eq! (decapsulator_send.to_bytes().as_slice(), skSm.as_slice());
+    let (decapsulator_send, encapsulator_send) = HpkeKemP521HkdfSha512::from_seed(&ikmS.into());
+    assert_eq! (encapsulator_send.to_bytes(), pkSm);
+    assert_eq! (decapsulator_send.to_bytes(), skSm);
 
     let skRm3 = elliptic_curve::SecretKey::<NistP521>::from_slice(&skRm).unwrap();
     let pkRm3 = elliptic_curve::PublicKey::<NistP521>::from_sec1_bytes(pkRm.as_ref()).unwrap();
@@ -988,19 +1001,19 @@ fn test_rfc_9180_a_6_3 () {
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let encapsulator = HpkeAuthKemP521HkdfSha512::encap_from_keys(pkRm3, skSm3.clone());
-    let decapsulator = HpkeAuthKemP521HkdfSha512::decap_from_keys(pkSm3, skRm3.clone());
+    let encapsulator = <HpkeAuthKemP521HkdfSha512 as Kem>::EncapsulationKey::from_keys(pkRm3, skSm3.clone());
+    let decapsulator = <HpkeAuthKemP521HkdfSha512 as Kem>::DecapsulationKey::from_keys(pkSm3, skRm3.clone());
 
-    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE);
     assert! ( c0_calc.as_ref() == enc );
     assert! ( c0_calc.as_ref() == pkEm );
     assert! ( k_calc == shared_secret );
     
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert! ( k_calc2 == shared_secret );
 
     //let kdf = LabelledTkdf1::<HmacReset<Sha512>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>().into();
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha512::derive::<U32, U12, U64, LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>(true, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha512::derive::<LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>(true, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -1084,13 +1097,13 @@ fn test_rfc_9180_a_6_4 () {
             8a65398406a96ab8b5da3187412b2324089ea16ba4ff7e6f4fe55d281fc8ae5f2049
             032b69ebd");
 
-    let (pkRm2, skRm2) = HpkeKemP521HkdfSha512::generate_deterministic(&ikmR.into()).unwrap();
+    let (skRm2,pkRm2) = HpkeKemP521HkdfSha512::from_seed(&ikmR.into());
     assert_eq!(pkRm2.to_bytes(), pkRm);
     assert_eq!(skRm2.to_bytes(), skRm);
-    let (pkSm2, skSm2) = HpkeKemP521HkdfSha512::generate_deterministic(&ikmS.into()).unwrap();
+    let (skSm2, pkSm2) = HpkeKemP521HkdfSha512::from_seed(&ikmS.into());
     assert_eq!(pkSm2.to_bytes(), pkSm);
     assert_eq!(skSm2.to_bytes(), skSm);
-    let (pkEm2, skEm2) = HpkeKemP521HkdfSha512::generate_deterministic(&ikmE.into()).unwrap();
+    let (skEm2, pkEm2) = HpkeKemP521HkdfSha512::from_seed(&ikmE.into());
     assert_eq!(pkEm2.to_bytes(), pkEm);
     assert_eq!(skEm2.to_bytes(), skEm);
 
@@ -1104,16 +1117,16 @@ fn test_rfc_9180_a_6_4 () {
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    let (c0_calc, k_calc) = encapsulator.encapsulate_deterministic(&ikmE);
     assert! ( c0_calc.as_ref() == enc );
     assert_eq! ( k_calc, shared_secret);
     
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert! ( k_calc2 == shared_secret );
 
     //let kdf = LabelledTkdf1::<HmacReset<Sha512>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>().into();
 
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha512::derive::<U32, U12, U64, LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>(true, &shared_secret, &info, Some(Psk{val: &psk, id: &psk_id})).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha512::derive::<LabelKdf::<kem_id::DhKemP521HkdfSha512,kdf_id::HkdfSha512,aead_id::Aes256Gcm>>(true, &shared_secret, &info, Some(Psk{val: &psk, id: &psk_id}));
     assert! ( key2 == key );
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
@@ -1162,10 +1175,10 @@ fn test_rfc_9180_a_7_1 () {
     let _secret=hex!("04d64e0620aa047e9ab833b0ebcd4ff026cefbe44338fd7d1a93548102ee01af");
     let _exporter_secret=hex!("79dc8e0509cf4a3364ca027e5a0138235281611ca910e435e8ed58167c72f79b");
 
-    let (encapsulatorR, decapsulatorR) = HpkeKemX25519HkdfSha256::generate_deterministic(&ikmR.into()).unwrap();
+    let (decapsulatorR, encapsulatorR ) = HpkeKemX25519HkdfSha256::from_seed(&ikmR.into());
     assert_eq! ( encapsulatorR.to_bytes(), pkRm);
     assert_eq! ( decapsulatorR.to_bytes(), skRm);
-    let (encapsulatorE, decapsulatorE) = HpkeKemX25519HkdfSha256::generate_deterministic(&ikmE.into()).unwrap();
+    let (decapsulatorE, encapsulatorE ) = HpkeKemX25519HkdfSha256::from_seed(&ikmE.into());
     assert_eq! ( encapsulatorE.to_bytes(), pkEm);
     assert_eq! ( decapsulatorE.to_bytes(), skEm);
 
@@ -1177,19 +1190,19 @@ fn test_rfc_9180_a_7_1 () {
     let exported_value=hex!("7a36221bd56d50fb51ee65edfd98d06a23c4dc87085aa5866cb7087244bd2a36");
     let (enc_calc, calc_exported_value) = he_encryptor.single_shot_sender_export_deterministic::<U32>(&ikmE, &exporter_context, &info, None).unwrap();
     assert! ( calc_exported_value == exported_value);
-    assert_eq!( enc_calc, enc.into());
+    assert_eq!( enc_calc, enc);
     
     let exporter_context=hex!("00");
     let exported_value=hex!("d5535b87099c6c3ce80dc112a2671c6ec8e811a2f284f948cec6dd1708ee33f0");
     let (enc_calc, calc_exported_value) = he_encryptor.single_shot_sender_export_deterministic::<U32>(&ikmE, &exporter_context, &info, None).unwrap();
     assert! ( calc_exported_value == exported_value);
-    assert_eq!( enc_calc, enc.into());
+    assert_eq!( enc_calc, enc);
 
     let exporter_context=hex!("54657374436f6e74657874");
     let exported_value=hex!("ffaabc85a776136ca0c378e5d084c9140ab552b78f039d2e8775f26efff4c70e");
     let (enc_calc, calc_exported_value) = he_encryptor.single_shot_sender_export_deterministic::<U32>(&ikmE, &exporter_context, &info, None).unwrap();
     assert! ( calc_exported_value == exported_value);
-    assert_eq!( enc_calc, enc.into());
+    assert_eq!( enc_calc, enc);
 }
 
 
@@ -1247,14 +1260,14 @@ fn test_rfc_9180_a_7_2 () {
     let exported_value = hex!("1721ed2aa852f84d44ad020c2e2be4e2e6375098bf48775a533505fd56a3f416");
     let (_enc_calc, calc_exported_value) = he_encryptor.single_shot_sender_export_deterministic::<U32>(&ikmE, &exporter_context, &info, Some(Psk{val:&psk, id:&psk_id})).unwrap();
     assert! ( calc_exported_value == exported_value);
-    let recv_exported_value = exporter_ctx2.export::<U32>(&exporter_context).unwrap();
+    let recv_exported_value: Array<u8, U32> = exporter_ctx2.export(&exporter_context);
     assert! ( recv_exported_value == exported_value);
        
     let exporter_context = hex!("54657374436f6e74657874");
     let exported_value = hex!("7c9d79876a288507b81a5a52365a7d39cc0fa3f07e34172984f96fec07c44cba");
     let (_enc_calc, calc_exported_value) = he_encryptor.single_shot_sender_export_deterministic::<U32>(&ikmE, &exporter_context, &info, Some(Psk{val:&psk, id:&psk_id})).unwrap();
     assert! ( calc_exported_value == exported_value);
-    let recv_exported_value = exporter_ctx2.export::<U32>(&exporter_context).unwrap();
+    let recv_exported_value: Array<u8, U32> = exporter_ctx2.export(&exporter_context);
     assert! ( recv_exported_value == exported_value);
    
 }
@@ -1307,23 +1320,23 @@ fn test_rfc_9180_a_7_3 () {
 
     let exporter_context = hex!("");
     let exported_value = hex!("83c1bac00a45ed4cb6bd8a6007d2ce4ec501f55e485c5642bd01bf6b6d7d6f0a");
-    let calc_exported_value = exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let calc_exported_value: Array<u8, U32> = exporter_ctx.export(&exporter_context);
     assert! ( calc_exported_value == exported_value);
     let recv_exported_value = he_decryptor.single_shot_recv_export::<U32>(&enc_calc, &info, &exporter_context, None).unwrap();
     assert! ( recv_exported_value == exported_value);
 
     let exporter_context = hex!("00");
     let exported_value = hex!("08a1d1ad2af3ef5bc40232a64f920650eb9b1034fac3892f729f7949621bf06e");
-    let calc_exported_value = exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let calc_exported_value: Array<u8, U32> = exporter_ctx.export(&exporter_context);
     assert! ( calc_exported_value == exported_value);
-    let recv_exported_value = exporter_ctx2.export::<U32>(&exporter_context).unwrap();
+    let recv_exported_value: Array<u8, U32> = exporter_ctx2.export(&exporter_context);
     assert! ( recv_exported_value == exported_value);
 
     let exporter_context = hex!("54657374436f6e74657874");
     let exported_value = hex!("ff3b0e37a9954247fea53f251b799e2edd35aac7152c5795751a3da424feca73");
-    let calc_exported_value = exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let calc_exported_value: Array<u8, U32> = exporter_ctx.export(&exporter_context);
     assert! ( calc_exported_value == exported_value);
-    let recv_exported_value = exporter_ctx2.export::<U32>(&exporter_context).unwrap();
+    let recv_exported_value : Array<u8, U32>= exporter_ctx2.export(&exporter_context);
     assert! ( recv_exported_value == exported_value);
 }
 
@@ -1355,13 +1368,13 @@ fn test_rfc_9180_a_7_4 () {
             c9c64fee26bdd292");
     let _secret = hex!("c15c5bec374f2087c241d3533c6ec48e1c60a21dd00085619b2ffdd84a7918c3");
 
-    let (encapsulatorR, decapsulatorR) = HpkeKemX25519HkdfSha256::generate_deterministic(&ikmR.into()).unwrap();
+    let (decapsulatorR,encapsulatorR) = HpkeKemX25519HkdfSha256::from_seed(&ikmR.into());
     assert_eq!(encapsulatorR.to_bytes(), pkRm);
     assert_eq!(decapsulatorR.to_bytes(), skRm);
-    let (encapsulatorS, decapsulatorS) = HpkeKemX25519HkdfSha256::generate_deterministic(&ikmS.into()).unwrap();
+    let (decapsulatorS,encapsulatorS) = HpkeKemX25519HkdfSha256::from_seed(&ikmS.into());
     assert_eq!(encapsulatorS.to_bytes(), pkSm);
     assert_eq!(decapsulatorS.to_bytes(), skSm);
-    let (encapsulatorE, decapsulatorE) = HpkeKemX25519HkdfSha256::generate_deterministic(&ikmE.into()).unwrap();
+    let (decapsulatorE, encapsulatorE) = HpkeKemX25519HkdfSha256::from_seed(&ikmE.into());
     assert_eq!(encapsulatorE.to_bytes(), pkEm);
     assert_eq!(decapsulatorE.to_bytes(), skEm);
 
@@ -1387,23 +1400,23 @@ fn test_rfc_9180_a_7_4 () {
     
     let exporter_context = hex!("");
     let exported_value = hex!("dafd8beb94c5802535c22ff4c1af8946c98df2c417e187c6ccafe45335810b58");
-    let send_exported_value = send_exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let send_exported_value: Array<u8, U32> = send_exporter_ctx.export(&exporter_context);
     assert! ( send_exported_value == exported_value);
-    let recv_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let recv_exported_value: Array<u8, U32> = recv_exporter_ctx.export(&exporter_context);
     assert! ( recv_exported_value == exported_value);
 
     let exporter_context = hex!("00");
     let exported_value = hex!("7346bb0b56caf457bcc1aa63c1b97d9834644bdacac8f72dbbe3463e4e46b0dd");
-    let calc_exported_value = send_exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let calc_exported_value: Array<u8, U32> = send_exporter_ctx.export(&exporter_context);
     assert! ( calc_exported_value == exported_value);
-    let recv_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let recv_exported_value: Array<u8, U32> = recv_exporter_ctx.export(&exporter_context);
     assert! ( recv_exported_value == exported_value);
 
     let exporter_context = hex!("54657374436f6e74657874");
     let exported_value = hex!("84f3466bd5a03bde6444324e63d7560e7ac790da4e5bbab01e7c4d575728c34a");
-    let calc_exported_value = send_exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let calc_exported_value: Array<u8, U32> = send_exporter_ctx.export(&exporter_context);
     assert! ( calc_exported_value == exported_value);
-    let calc_exported_value = recv_exporter_ctx.export::<U32>(&exporter_context).unwrap();
+    let calc_exported_value: Array<u8, U32> = recv_exporter_ctx.export(&exporter_context);
     assert! ( calc_exported_value == exported_value);
 }
 
@@ -1430,34 +1443,34 @@ fn test_p256k1_b_1_1 () {
     let exporter_secret = hex!( "dd82a88bd58f05bc453a77495898af2df905be8b6ffe096a071b8
                 0edf3428d1c");
 
-    let (pkrm3, skrm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmR)).unwrap();
+    let (skrm3,pkrm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmR));
     assert_eq!(pkrm3.to_bytes().as_slice(), &pkRm );
     assert_eq!(skrm3.to_bytes().as_slice(), &skRm );
 
-    let (pkem3, skem3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmE)).unwrap();
+    let (skem3, pkem3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmE));
     assert_eq!(pkem3.to_bytes().as_slice(), &pkEm );
     assert_eq!(skem3.to_bytes().as_slice(), &skEm );
     
-    let encapsulator = HpkeKemSecP256k1HkdfSha256::from_bytes_encap(&pkRm.into());
-    let decapsulator = HpkeKemSecP256k1HkdfSha256::from_bytes_decap(&skRm.into());
+    let encapsulator = HpkeKemSecP256k1HkdfSha256::try_from_bytes_encap(&pkRm.into()).unwrap();
+    let decapsulator = HpkeKemSecP256k1HkdfSha256::try_from_slice_decap(&skRm).unwrap();
     
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE);
     assert_eq!(c0_calc.as_slice(), &pkEm);
     assert! ( k_calc == shared_secret );
 
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert_eq!(k_calc2, shared_secret);
 
     //let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>().into();
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U16, U12, U32, LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>(false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>(false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
     
     // Repeat using full HPKE types
-    let decryptor = HpkeIesK256Sha256Aes128Gcm::decryptor_from_bytes(&skRm.into());
+    let decryptor = HpkeIesK256Sha256Aes128Gcm::try_decryptor_from_slice(&skRm).unwrap();
     let cipher_context = decryptor.setup_receiver_cipher(&c0_calc, &info, None).unwrap();
 
     assert_eq!(cipher_context.base_nonce, base_nonce); // only base nonce is readily accessible
@@ -1490,40 +1503,40 @@ fn test_p256k1_b_1_2 () {
     let exporter_secret = hex!( "e0abbed4f7753f450466fa5e4d37fe32ee72c5b17b0ec8de79d14
                 37b49646ac2");
 
-    let (pkrm3, skrm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmR)).unwrap();
-    assert_eq!(pkrm3.to_bytes().as_slice(), &pkRm );
-    assert_eq!(skrm3.to_bytes().as_slice(), &skRm );
+    let (skrm3, pkrm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmR));
+    assert_eq!(pkrm3.to_bytes(), pkRm );
+    assert_eq!(skrm3.to_bytes(), skRm );
 
-    let (pkem3, skem3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmE)).unwrap();
-    assert_eq!(pkem3.to_bytes().as_slice(), &pkEm );
-    assert_eq!(skem3.to_bytes().as_slice(), &skEm );
+    let (skem3,pkem3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmE));
+    assert_eq!(pkem3.to_bytes(), pkEm );
+    assert_eq!(skem3.to_bytes(), skEm );
 
-    let (pkSm3, skSm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmS)).unwrap();
+    let (skSm3,pkSm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmS));
     //assert_eq!(pkSm3.to_bytes().as_slice(), &pkSm );
     //assert_eq!(skSm3.to_bytes().as_slice(), &skSm );
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let encapsulator = HpkeAuthKemSecP256k1HkdfSha256::encap_from_keys(pkrm3.encapsulator.recipient_public, skSm3.decapsulator.recipient_private);
-    let decapsulator = HpkeAuthKemSecP256k1HkdfSha256::decap_from_keys(pkSm3.encapsulator.recipient_public, skrm3.decapsulator.recipient_private.clone() );
+    let encapsulator = HpkeAuthKemSecP256k1HkdfSha256::encap_from_keys(pkrm3.0.recipient_public, skSm3.decap.recipient_private);
+    let decapsulator = HpkeAuthKemSecP256k1HkdfSha256::decap_from_keys(pkSm3.0.recipient_public, skrm3.decap.recipient_private.clone() );
     
-    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE);
 
     assert_eq!(c0_calc.as_slice(), &pkEm);
     assert! ( k_calc == shared_secret );
 
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert_eq! ( k_calc2, shared_secret);
 
     //let kdf = LabelledTkdf1::new_with_label::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>().into();
     
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U16, U12, U32, LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>(true, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U16>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>>(true, &shared_secret, &info, None);
     assert_eq! ( key2, key);
     assert_eq! ( base_nonce2, base_nonce);
     assert_eq! ( exporter_secret2, exporter_secret);
 
     // Repeat using full HPKE types
-    let decryptor = HpkeAuthIesK256Sha256Aes128Gcm::auth_decryptor_from_keys(skrm3.decapsulator.recipient_private, pkSm3.encapsulator.recipient_public);
+    let decryptor = HpkeAuthIesK256Sha256Aes128Gcm::auth_decryptor_from_keys(skrm3.decap.recipient_private, pkSm3.0.recipient_public);
     let cipher_context = decryptor.setup_receiver_cipher(&c0_calc, &info, None).unwrap();
 
     assert_eq!(cipher_context.base_nonce, base_nonce); // only base nonce is readily accessible
@@ -1554,35 +1567,35 @@ fn test_p256k1_b_2_1 () {
     let exporter_secret = hex!( "3edae43083bb52033f9ff2eea2bf5a8bdc8bbd5509e5958b09c47
                 7b32d2432ae");
 
-    let (pkrm3, skrm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmR)).unwrap();
+    let (skrm3, pkrm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmR));
     assert_eq!(pkrm3.to_bytes().as_slice(), &pkRm );
     assert_eq!(skrm3.to_bytes().as_slice(), &skRm );
 
-    let (pkem3, skem3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmE)).unwrap();
+    let (skem3, pkem3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmE));
     assert_eq!(pkem3.to_bytes().as_slice(), &pkEm );
     assert_eq!(skem3.to_bytes().as_slice(), &skEm );
 
-    let encapsulator = HpkeKemSecP256k1HkdfSha256::from_bytes_encap(&pkRm.into());
-    let decapsulator = HpkeKemSecP256k1HkdfSha256::from_bytes_decap(&skRm.into());
+    let encapsulator = HpkeKemSecP256k1HkdfSha256::try_from_bytes_encap(&pkRm.into()).unwrap();
+    let decapsulator = HpkeKemSecP256k1HkdfSha256::try_from_slice_decap(&skRm).unwrap();
     
     //let mut pred_rng = PredictableRng::new(&skEm);
     
-    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE);
     assert_eq!( c0_calc.as_slice(), &pkEm);
     assert! ( k_calc == shared_secret );
 
-    let k_calc3 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc3 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert_eq!(k_calc3, shared_secret);
 
     //let kdf = LabelledTkdf1::new_with_label::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes256Gcm>>().into();
         
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U32, U12, U32, LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes256Gcm>>(false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes256Gcm>>(false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
 
     // Repeat using full HPKE types
-    let decryptor = HpkeIesK256Sha256Aes256Gcm::decryptor_from_bytes(&skRm.into());
+    let decryptor = HpkeIesK256Sha256Aes256Gcm::try_decryptor_from_slice(&skRm).unwrap();
     let cipher_context = decryptor.setup_receiver_cipher(&c0_calc, &info, None).unwrap();
     assert_eq!(cipher_context.base_nonce, base_nonce); // only base nonce is readily accessible
 }
@@ -1616,36 +1629,36 @@ fn test_p256k1_b_2_2 () {
     let exporter_secret = hex!( "1801bd0baf8879470b9652c68e53dea9061d31f658a3bf2196628
                 6dd511b2858");
 
-    let (pkrm3, skrm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmR)).unwrap();
-    assert_eq!(pkrm3.to_bytes().as_slice(), &pkRm );
-    assert_eq!(skrm3.to_bytes().as_slice(), &skRm );
+    let (skrm3, pkrm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmR));
+    assert_eq!(pkrm3.to_bytes(), pkRm );
+    assert_eq!(skrm3.to_bytes(), skRm );
 
-    let (pkem3, skem3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmE)).unwrap();
-    assert_eq!(pkem3.to_bytes().as_slice(), &pkEm );
-    assert_eq!(skem3.to_bytes().as_slice(), &skEm );
+    let (skem3, pkem3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmE));
+    assert_eq!(pkem3.to_bytes(), pkEm );
+    assert_eq!(skem3.to_bytes(), skEm );
 
-    let (pkSm3, skSm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmS)).unwrap();
+    let (skSm3, pkSm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmS));
     
     //let mut pred_rng = PredictableRng::new(&skEm);
-    let encapsulator = HpkeAuthKemSecP256k1HkdfSha256::encap_from_keys(pkrm3.encapsulator.recipient_public, skSm3.decapsulator.recipient_private);
-    let decapsulator = HpkeAuthKemSecP256k1HkdfSha256::decap_from_keys(pkSm3.encapsulator.recipient_public, skrm3.decapsulator.recipient_private.clone());
+    let encapsulator = HpkeAuthKemSecP256k1HkdfSha256::encap_from_keys(pkrm3.0.recipient_public, skSm3.decap.recipient_private);
+    let decapsulator = HpkeAuthKemSecP256k1HkdfSha256::decap_from_keys(pkSm3.0.recipient_public, skrm3.decap.recipient_private.clone());
     
-    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
-    assert_eq!( c0_calc, pkEm.into());
+    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE);
+    assert_eq!( c0_calc, pkEm);
     assert_eq!( k_calc, shared_secret );
         
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert_eq! ( k_calc2, shared_secret);
 
     //let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes256Gcm>>().into();
     
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U32, U12, U32, LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes256Gcm>> ( true, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes256Gcm>> ( true, &shared_secret, &info, None);
     assert_eq! ( key2, key);
     assert_eq! ( base_nonce2, base_nonce);
     assert_eq! ( exporter_secret2, exporter_secret);
   
     // Repeat using full HPKE types
-    let decryptor = HpkeAuthIesK256Sha256Aes256Gcm::auth_decryptor_from_keys(skrm3.decapsulator.recipient_private, pkSm3.encapsulator.recipient_public);
+    let decryptor = HpkeAuthIesK256Sha256Aes256Gcm::auth_decryptor_from_keys(skrm3.decap.recipient_private, pkSm3.0.recipient_public);
     let cipher_context = decryptor.setup_receiver_cipher(&c0_calc, &info, None).unwrap();
     assert_eq!(cipher_context.base_nonce, base_nonce); // only base nonce is readily accessible
 }
@@ -1673,35 +1686,35 @@ fn test_p256k1_b_3_1 () {
     let exporter_secret = hex!( "83e82aad90186ddd7e1db090c840ee70eb6cac7531b64dc52a129
                 97462c8d0d8");
 
-    let (pkrm3, skrm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmR)).unwrap();
+    let (skrm3, pkrm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmR));
     assert_eq!(pkrm3.to_bytes().as_slice(), &pkRm );
     assert_eq!(skrm3.to_bytes().as_slice(), &skRm );
 
-    let (pkem3, skem3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmE)).unwrap();
+    let (skem3, pkem3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmE));
     assert_eq!(pkem3.to_bytes().as_slice(), &pkEm );
     assert_eq!(skem3.to_bytes().as_slice(), &skEm );
 
     //let mut pred_rng = PredictableRng::new(&skEm);
 
-    let encapsulator = HpkeKemSecP256k1HkdfSha256::from_bytes_encap(&pkRm.into());
-    let decapsulator = HpkeKemSecP256k1HkdfSha256::from_bytes_decap(&skRm.into());
+    let encapsulator = HpkeKemSecP256k1HkdfSha256::try_from_bytes_encap(&pkRm.into()).unwrap();
+    let decapsulator = HpkeKemSecP256k1HkdfSha256::try_from_slice_decap(&skRm).unwrap();
     
-    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
+    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE);
     assert_eq!( c0_calc.as_slice(), &pkEm);
     assert! ( k_calc == shared_secret );
 
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert_eq! ( k_calc2, shared_secret);
 
     //let kdf = LabelledTkdf1::new_with_label::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>().into();
        
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U32, U12, U32, LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>(false, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>(false, &shared_secret, &info, None);
     assert! ( key2 == key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
 
     // Repeat using full HPKE types
-    let decryptor = HpkeIesK256Sha256ChaCha20Poly1305::decryptor_from_bytes(&skRm.into());
+    let decryptor = HpkeIesK256Sha256ChaCha20Poly1305::try_decryptor_from_slice(&skRm).unwrap();
     let cipher_context = decryptor.setup_receiver_cipher(&c0_calc, &info, None).unwrap();
     assert_eq!(cipher_context.base_nonce, base_nonce); // only base nonce is readily accessible
 }
@@ -1735,37 +1748,37 @@ fn test_p256k1_b_3_2 () {
     let exporter_secret = hex!( "89125c238053ad3cefb2a0acdb8da1ce89785dba613a0ca83ed78
                 035c51f3667");
 
-    let (pkrm3, skrm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmR)).unwrap();
+    let (skrm3, pkrm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmR));
     assert_eq!(pkrm3.to_bytes().as_slice(), &pkRm );
     assert_eq!(skrm3.to_bytes().as_slice(), &skRm );
 
-    let (pkem3, skem3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmE)).unwrap();
+    let (skem3, pkem3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmE));
     assert_eq!(pkem3.to_bytes().as_slice(), &pkEm );
     assert_eq!(skem3.to_bytes().as_slice(), &skEm );
 
-    let (pkSm3, skSm3) = HpkeKemSecP256k1HkdfSha256::generate_deterministic(&Array::from(ikmS)).unwrap();
+    let (skSm3, pkSm3) = HpkeKemSecP256k1HkdfSha256::from_seed(&Array::from(ikmS));
     
     //let mut pred_rng = PredictableRng::new(&skEm);
-    let encapsulator = HpkeAuthKemSecP256k1HkdfSha256::encap_from_keys(pkrm3.encapsulator.recipient_public, skSm3.decapsulator.recipient_private);
-    let decapsulator = HpkeAuthKemSecP256k1HkdfSha256::decap_from_keys(pkSm3.encapsulator.recipient_public, skrm3.decapsulator.recipient_private.clone() );
+    let encapsulator = HpkeAuthKemSecP256k1HkdfSha256::encap_from_keys(pkrm3.0.recipient_public, skSm3.decap.recipient_private);
+    let decapsulator = HpkeAuthKemSecP256k1HkdfSha256::decap_from_keys(pkSm3.0.recipient_public, skrm3.decap.recipient_private.clone() );
     
-    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE).unwrap();
-    assert_eq!( c0_calc, pkEm.into() );
+    let (c0_calc, k_calc ) = encapsulator.encapsulate_deterministic(&ikmE);
+    assert_eq!( c0_calc, pkEm );
     assert_eq!( k_calc, shared_secret );
 
-    let k_calc2 = decapsulator.decapsulate(&c0_calc).unwrap();
+    let k_calc2 = decapsulator.try_decapsulate(&c0_calc).unwrap();
     assert_eq!( k_calc2, shared_secret);
 
     //let kdf = LabelledTkdf1::<HmacReset<Sha256>,LabelHpkeV1>::new_with_label::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>().into();
     
-    let (key2, base_nonce2, exporter_secret2) = HpkeHkdfSha256::derive::<U32, U12, U32, LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>> ( true, &shared_secret, &info, None).unwrap();
+    let (key2, base_nonce2, exporter_secret2): (Array<u8,U32>,Array<u8,U12>,_) = HpkeHkdfSha256::derive::<LabelKdf::<kem_id::DhKemSecP256k1HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>> ( true, &shared_secret, &info, None);
     assert_eq! ( key2, key);
     assert! ( base_nonce2 == base_nonce);
     assert! ( exporter_secret2 == exporter_secret);
     
 
     // Repeat using full HPKE types
-    let decryptor = HpkeAuthIesK256Sha256ChaCha20Poly1305::auth_decryptor_from_keys(skrm3.decapsulator.recipient_private, pkSm3.encapsulator.recipient_public);
+    let decryptor = HpkeAuthIesK256Sha256ChaCha20Poly1305::auth_decryptor_from_keys(skrm3.decap.recipient_private, pkSm3.0.recipient_public);
     let cipher_context = decryptor.setup_receiver_cipher(&c0_calc, &info, None).unwrap();
 
     assert_eq!(cipher_context.base_nonce, base_nonce); // only base nonce is readily accessible
