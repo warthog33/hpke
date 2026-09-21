@@ -4,7 +4,6 @@
 //! two step kdf as described in the original RFC 9180 and
 //! one step kdf introduced in draft-ietf-hpke-pq
 //! 
-use std::iter::once;
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
 
@@ -14,30 +13,6 @@ use aead::array::typenum::{Diff, Sum, Unsigned};
 use kdfs::{Kdf, KdfFixed, Label, TwoStepKdf};
 use kdfs::hybrid_array::{Array, ArraySize};
 
-
-
-/// Kdf used in the KEM from RFC9180
-/// It is a version of the ExtractExpand KDF with a given label/suite_id. 
-/// For Kem the label is specific suite_id of 'KEM' + KEM_ID
-/// For Kdf the label/suite_id is 'HPKE + KEM_ID + KDF_ID + AEAD_ID
-/// 
-/// This sample is from RFC 9180, Appendix A.1.1
-///```
-/// use sha2::Sha256;
-/// use kdfs::Kdf;
-/// use hpke::{hpke_kdf::KdfForKemUsingHkdf, kem_id::DhKemX25519HkdfSha256};
-/// use hex_literal::hex;
-/// use kems::generic_array::typenum::consts::U32;
-/// 
-/// let pkEm = hex!("37fda3567bdbd628e88668c3c8d7e97d1d1253b6d4ea6d44c150f741f1bf4431");
-/// let pkRm = hex!("3948cfe0ad1ddb695d780e59077195da6c56506b027329794ab02bca80815c4d");
-/// let raw_shared_secret = hex!("B3B5C19EAB3F088AC18F23F774FF6414BA4FDE45404D10085EFC3E4DC9C72E35");
-/// let shared_secret = hex!("fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc");
-///
-/// let result = KdfForKemUsingHkdf::<Sha256,DhKemX25519HkdfSha256>::derive_secret_others::<U32>(&raw_shared_secret, [pkEm.as_ref(), pkRm.as_ref()]).unwrap();
-/// assert! ( result == shared_secret);
-///```
-/// 
 
 
 /// Label used for the HPKE version, used to derive the shared secret from the shared secret and other inputs
@@ -130,12 +105,12 @@ impl<KemId: Unsigned, KdfId: Unsigned, AeadId: Unsigned> Label for LabelKdf <Kem
 }
 
 /// Empty label, used where no label is required, or where the label is specified in other ways
-#[derive(Clone)]
-pub struct LabelNone();
-impl Label for LabelNone
-{
-    const LABEL: &'static[u8] = &[]; 
-}
+// #[derive(Clone)]
+// pub struct LabelNone();
+// impl Label for LabelNone
+// {
+//     const LABEL: &'static[u8] = &[]; 
+// }
 
 
 
@@ -178,19 +153,17 @@ pub trait Export<L: ArraySize>
 /// ```
 /// use sha2::Sha512;
 /// use hmac::{HmacReset};
-/// use kdfs::{rfc5869_hkdf::Hkdf2};
-/// use kdfs::iso11770_6::{Tkdf, Kpf1, Ktf1};
-/// use hpke::{hpke_kdf::{HpkeTwoStageKdf, HpkeKdf}, kem_id, kdf_id, aead_id};
-/// use hpke::hpke_kdf::LabelKdf;
+/// use kdfs::{rfc5869_hkdf::Hkdf};
+/// use hpke::{hpke_kdf::{HpkeTwoStageKdf, HpkeKdf, LabelKdf}, kem_id, kdf_id, aead_id};
 /// use hex_literal::hex;
-/// use kems::generic_array::typenum::consts::{U12, U16, U32};
+/// use kdfs::hybrid_array::{Array, typenum::consts::{U12, U16, U32}};
 ///
 /// let shared_secret=hex!("02f584736390fc93f5b4ad039826a3fa08e9911bd1215a3db8e8791ba533cafd");
 /// let info=hex!("4f6465206f6e2061204772656369616e2055726e");
 /// let key=hex!("090ca96e5f8aa02b69fac360da50ddf9");
 /// 
-/// let (key_calc, nonce, exporter_secret2) = HpkeTwoStageKdf::<Tkdf<Ktf1<HmacReset<sha2::Sha512>>, Kpf1<HmacReset<sha2::Sha512>,u8>>>::derive::<U16, U12, U32, LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>>
-///            (false, &shared_secret, &info, None).unwrap();;
+/// let (key_calc, nonce, exporter_secret2): (Array<u8, U16>, Array<u8, U12>, _) = HpkeTwoStageKdf::<Hkdf<Sha512>>::derive::<LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>>
+///            (false, &shared_secret, &info, None);
 /// assert! ( key_calc == key );
 /// ```
 
@@ -264,7 +237,7 @@ where   K: TwoStepKdf + 'static + Default,
 
         let psk_id_hash: Array<u8, Self::ExporterSecretSize> = K::Extract::derive_secret_others_fixed( psk.id, [LabelHpkeV1::LABEL, LB::LABEL, b"psk_id_hash"] );
         let info_hash: Array<u8, Self::ExporterSecretSize> = K::Extract::derive_secret_others_fixed( info, [LabelHpkeV1::LABEL, LB::LABEL, b"info_hash"]);
-        let secret: Array<u8, Self::ExporterSecretSize> = K::Extract::derive_secrets_salt_others_fixed( once(psk.val), shared_secret, [LabelHpkeV1::LABEL, LB::LABEL, b"secret"]);
+        let secret: Array<u8, Self::ExporterSecretSize> = K::Extract::derive_secrets_salt_others_fixed( Some(psk.val), shared_secret, [LabelHpkeV1::LABEL, LB::LABEL, b"secret"]);
 
         let key = K::Expand::derive_secret_others(secret.as_ref(), [&LK::U16.to_be_bytes(), LabelHpkeV1::LABEL, LB::LABEL, b"key", &[mode], psk_id_hash.as_slice(), &info_hash]);
         let base_nonce = K::Expand::derive_secret_others(secret.as_ref(), [&LN::U16.to_be_bytes(), LabelHpkeV1::LABEL, LB::LABEL, b"base_nonce", &[mode], psk_id_hash.as_slice(), &info_hash]);

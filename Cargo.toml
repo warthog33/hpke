@@ -25,27 +25,27 @@ kdfs = { path = "../kdfs" }
 kems = { path = "../kems" }
 kem = { version = "0.3.0", feature=["getrandom"] }
 
-aead = "0.6.0-rc.0"
+aead = "0.6.1"
 digest = { version="0.11.3", features = ["mac"]}
-elliptic-curve = { version = "0.14.0-rc.13", features = ["ecdh"] }
+elliptic-curve = { version = "0.14.0", features = ["ecdh"] }
 
 aes-kw = { version = "0.3.0"}
 
 aes  =  { version = "0.9.0", optional = true }
 aes-gcm = { version = "0.11.0-rc.0", optional = true }
 cbc  = { version = "0.2.1", optional = true }
-p256 = { version = "0.14.0-rc.0", optional = true}
-p384 = { version = "0.14.0-rc.0", optional = true }
-p521 = { version = "0.14.0-rc.0", optional = true}
-k256 = { version = "0.14.0-rc.0", optional = true}
-x448 = { version = "0.14.0-pre.0", optional = true}
-x25519-dalek = { version = "2.0.0", optional=true, features = ["static_secrets"] }
+p256 = { version = "0.14.0", optional = true}
+p384 = { version = "0.14.0", optional = true }
+p521 = { version = "0.14.0", optional = true}
+k256 = { version = "0.14.0", optional = true}
+x448 = { version = "0.14.0-pre.12", optional = true}
+x25519-dalek = { version = "3.0.0", optional=true, features = ["static_secrets","getrandom"] }
 sha2 = { version = "0.11.0", optional = true }
 sha3 = { version = "0.12.0", optional = true }
 hmac = { version = "0.13.0", optional = true }
 shake = { version = "0.1.0", optional = true }
 turboshake = { version = "0.7.1", optional = true }
-chacha20poly1305 = { version = "0.11.0-rc.0", optional = true }
+chacha20poly1305 = { version = "0.11.0", optional = true }
 crypto_secretbox = { version = "0.1.1"}
 
 
@@ -66,4 +66,5 @@ serde_with = { version = "3.0", features = ["base64"] }
 hex-literal = "0.4.1"
 
 [patch.crates-io]
-hybrid-array = { path = "../../hybrid-array-mod" }
+#hybrid-array = { path = "../../hybrid-array-mod" }
+hybrid-array = { git = "https://github.com/warthog33/hybrid-array-mod.git/" }

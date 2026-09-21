@@ -5,7 +5,7 @@ use aead::Payload;
 use elliptic_curve::common::KeyExport;
 use hex_literal::hex;
 use hpke::{kem_id};
-use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768Sha256Aes128Gcm, HpkeIesMlKem1024Sha384Aes256Gcm, HpkeIesMlKem768P256Shake256Aes128Gcm, HpkeIesMlKem1024P384Shake256Aes256Gcm};
+use hpke::hpke_types::draft_ietf_hpke_pq::{HpkeIesMlKem768Sha256Aes128Gcm, HpkeIesMlKem1024Sha384Aes256Gcm, HpkeIesMlKem768P256Shake256Aes128Gcm};
 use kdfs::hybrid_array::Array;
 use kem::{TryDecapsulate};
 use hpke::hpke_kdf::Export;
@@ -832,183 +832,183 @@ fn a_5_v3 ()
 
 
 
-#[test]
-#[allow(non_snake_case)]
-#[ignore]
-fn test_a_6_v3 () 
-{
-    // A.6.  QSF-P384-MLKEM1024, Unknown KDF, AES-256-GCM
-    // A.6.1.  Base Setup Information
-    // mode: 0
-    // kem_id: 81
-    // kdf_id: 17
-    // aead_id: 2
-    let _info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
-    let ikmR = hex!("6a206c70294ca1d907679a1739327522c5c3b04aaf3950bcf5b1ba7463954021");
-    let pkRm = hex!("58ba2106c3c59680a0e7272a30c038fde90e6b11bf4cf54bbfc3171e39415698
-        b168fc1a792acc7a7037de424fb805509d085b50b07aea08814bc38989da188e
-        e7841762c4e4b5cb682b6febfaab69c00e0f1451c385386c4a77b4a83c83015e
-        b6575fe9c7cc4a91c1bd33a8e71a36980a809c174b86e43e41c741ec27651d61
-        ccdd723bc9e14193f801f21656392c521c9a712b6b919afb7fb53bc4db9c062b
-        d62a680c8aacd0ac0963556429a604731e4406af0c0572d017adea480d989460
-        6ec625367a14dfd727f4256d0c24af2bb92eedc9be4b896a4ec7ad26b0822dcb
-        14f8e834030356df118ade762350ebbf822521bbc692c04382048ca8ec8c0f46
-        f47941fa095600215740674f6a7acfc86f98896b938002ca4c72fa74861b476f
-        b7f4b353e3444006633d69a3d60c278b2c04fa70371d5387af12197c579208b6
-        c63d2aaadee6656ddc1109284631624fb57656c51c406dc1779b410bfe270c8a
-        ab666b8501deb03c7dac31b4216c933164ff1cbf1fe45ac38409ff4cc9443b31
-        4f932e7e2b97abb91d76da6b8748028cc292683736fbe9b166aaa7fc108744a7
-        189fe2261222821e78955e613b57567433e84638c93032947555113fb6aa299f
-        526e1d015a012a1095bc08167731dad92e99342f3894b3e50712e89268ca1823
-        edb68b2d763de3510d7a56bf0cc9c3335cbf21765e58dc60c8ebb40cf817925b
-        ca7b08642415509968b7dfa80328b29e6e9aa1f8054e7b08a555c4602f51879e
-        f10e70b735f8e35a17326558d443a76b44b769489d2076128bb2e3814fc37c7a
-        dc4b10c2d16f22c579597907bd59a0621757a18848e4e813e5920670d783f9d2
-        bf3becac75b16932367a61846d043b7070453bde730996b099e6b6700e0411c0
-        4abc591682c6a25a0a1c11817375bde7a5a3f3523d08464bb091976b02a0277d
-        f0da8212b27edea6042829654654115853c05bd7b18ec47638275560c1569e71
-        373a443262ca5b68dac2eb7279eca47748d624ebb35442f50aef8a474fb22b44
-        945f30e58e85a79ab8997b853b09c74a3536f863f1f81ca3307a1ffc8259b87e
-        86c975a9db5f4a471b31137d04462fbc6415dd2a435fb097df3499ba9b1bd22a
-        9670f939a0bbb9ca597b5e1caebd14b4d07ace7f9694bc13350c20801682cb68
-        1bcdc8469ba19a814028845095540f9ac51f4b3a2176abd8230b8ee9061dca7b
-        9268817e649f87267c40d5095063a7b8f5003708aa1f04988b83c6ddfb1bb424
-        a2343c8389e4cba0f72510719df443520f205696b657e0173a70b81dad274084
-        fb3189c2abf0b4c760f8cdb6ea18f54c97c1c9b95c987ca544637c743723897c
-        797c7294cbca996c9ef0d849c2542f93e23a632a2fc9a2aa3aeac7bba3c1f945
-        c82fc1be6f46aca0796a08780ed2527e60e1c131b9049956969e6370c8424845
-        d34a6b4b45a01b2254701c9155533d4062214a61b196734551bd74c412278b45
-        740c5905dcc39545ac13c727833b5cdea8a0eeb5a9fd15c6a27c922c8b0b67b7
-        3fb0160f5641583ff70dcf96a62f540f08b3b51c9cc1df5a19886a2b24f67ed0
-        a38fa821610d547b5016cae503ba7cb37fe3da2d71caba4d4b79141ba797b24e
-        92c2bc77eb7559933b50e76d7707ab72bb7ffdc8a7ac95431c7649ded8b143d4
-        247178ccff9c3b2ab098d8aa1c2465c5814ac493a27005033a8725317b284c4a
-        abb90063cca18b0ea15251a1108e9231bce7926516901f2cc524e65798535880
-        98c33572e48a1bf7789f3357611c37874898d8689dbc03a5aec003b7b97c19d4
-        c266ea6a8289859734985ccb0241cb1ed4755e4c5b5fe9b48ae8307b5b0629d3
-        ab1015920149706661610743944f572781b8f04d368825b8d7a4906b42f78117
-        6fe90637f2698a0860f5616415f447798278ec415fa3623d926286e4e0409ad7
-        ba403a1178ec21297c176aba4e2b91604e7a22afb53ad477b1e203707e9c4d3f
-        bc79baacb15832ada4f9c4af91669022c5a008949bbba38f53ae92a041146917
-        ae9c49dd4a2bd5a263da2c9e4f4184958c3fcc1c722ae071882baf1cecb251f8
-        8a9ffbc32dc9b48b9b42b4a59a6a21978ec59e93a825ca642433809b0b098fda
-        1b9e1a0a05c41ba0a2a91d66e56755588202fab248b8afa59976a472176e9573
-        0a678297a305a9c288116ed96e44a825a9e10e5cf6d08de4c5cc9456bee0e22d
+// #[test]
+// #[allow(non_snake_case)]
+// #[ignore]
+// fn test_a_6_v3 () 
+// {
+//     // A.6.  QSF-P384-MLKEM1024, Unknown KDF, AES-256-GCM
+//     // A.6.1.  Base Setup Information
+//     // mode: 0
+//     // kem_id: 81
+//     // kdf_id: 17
+//     // aead_id: 2
+//     let _info = hex!("34663634363532303666366532303631323034373732363536333639363136653230353537323665");
+//     let ikmR = hex!("6a206c70294ca1d907679a1739327522c5c3b04aaf3950bcf5b1ba7463954021");
+//     let pkRm = hex!("58ba2106c3c59680a0e7272a30c038fde90e6b11bf4cf54bbfc3171e39415698
+//         b168fc1a792acc7a7037de424fb805509d085b50b07aea08814bc38989da188e
+//         e7841762c4e4b5cb682b6febfaab69c00e0f1451c385386c4a77b4a83c83015e
+//         b6575fe9c7cc4a91c1bd33a8e71a36980a809c174b86e43e41c741ec27651d61
+//         ccdd723bc9e14193f801f21656392c521c9a712b6b919afb7fb53bc4db9c062b
+//         d62a680c8aacd0ac0963556429a604731e4406af0c0572d017adea480d989460
+//         6ec625367a14dfd727f4256d0c24af2bb92eedc9be4b896a4ec7ad26b0822dcb
+//         14f8e834030356df118ade762350ebbf822521bbc692c04382048ca8ec8c0f46
+//         f47941fa095600215740674f6a7acfc86f98896b938002ca4c72fa74861b476f
+//         b7f4b353e3444006633d69a3d60c278b2c04fa70371d5387af12197c579208b6
+//         c63d2aaadee6656ddc1109284631624fb57656c51c406dc1779b410bfe270c8a
+//         ab666b8501deb03c7dac31b4216c933164ff1cbf1fe45ac38409ff4cc9443b31
+//         4f932e7e2b97abb91d76da6b8748028cc292683736fbe9b166aaa7fc108744a7
+//         189fe2261222821e78955e613b57567433e84638c93032947555113fb6aa299f
+//         526e1d015a012a1095bc08167731dad92e99342f3894b3e50712e89268ca1823
+//         edb68b2d763de3510d7a56bf0cc9c3335cbf21765e58dc60c8ebb40cf817925b
+//         ca7b08642415509968b7dfa80328b29e6e9aa1f8054e7b08a555c4602f51879e
+//         f10e70b735f8e35a17326558d443a76b44b769489d2076128bb2e3814fc37c7a
+//         dc4b10c2d16f22c579597907bd59a0621757a18848e4e813e5920670d783f9d2
+//         bf3becac75b16932367a61846d043b7070453bde730996b099e6b6700e0411c0
+//         4abc591682c6a25a0a1c11817375bde7a5a3f3523d08464bb091976b02a0277d
+//         f0da8212b27edea6042829654654115853c05bd7b18ec47638275560c1569e71
+//         373a443262ca5b68dac2eb7279eca47748d624ebb35442f50aef8a474fb22b44
+//         945f30e58e85a79ab8997b853b09c74a3536f863f1f81ca3307a1ffc8259b87e
+//         86c975a9db5f4a471b31137d04462fbc6415dd2a435fb097df3499ba9b1bd22a
+//         9670f939a0bbb9ca597b5e1caebd14b4d07ace7f9694bc13350c20801682cb68
+//         1bcdc8469ba19a814028845095540f9ac51f4b3a2176abd8230b8ee9061dca7b
+//         9268817e649f87267c40d5095063a7b8f5003708aa1f04988b83c6ddfb1bb424
+//         a2343c8389e4cba0f72510719df443520f205696b657e0173a70b81dad274084
+//         fb3189c2abf0b4c760f8cdb6ea18f54c97c1c9b95c987ca544637c743723897c
+//         797c7294cbca996c9ef0d849c2542f93e23a632a2fc9a2aa3aeac7bba3c1f945
+//         c82fc1be6f46aca0796a08780ed2527e60e1c131b9049956969e6370c8424845
+//         d34a6b4b45a01b2254701c9155533d4062214a61b196734551bd74c412278b45
+//         740c5905dcc39545ac13c727833b5cdea8a0eeb5a9fd15c6a27c922c8b0b67b7
+//         3fb0160f5641583ff70dcf96a62f540f08b3b51c9cc1df5a19886a2b24f67ed0
+//         a38fa821610d547b5016cae503ba7cb37fe3da2d71caba4d4b79141ba797b24e
+//         92c2bc77eb7559933b50e76d7707ab72bb7ffdc8a7ac95431c7649ded8b143d4
+//         247178ccff9c3b2ab098d8aa1c2465c5814ac493a27005033a8725317b284c4a
+//         abb90063cca18b0ea15251a1108e9231bce7926516901f2cc524e65798535880
+//         98c33572e48a1bf7789f3357611c37874898d8689dbc03a5aec003b7b97c19d4
+//         c266ea6a8289859734985ccb0241cb1ed4755e4c5b5fe9b48ae8307b5b0629d3
+//         ab1015920149706661610743944f572781b8f04d368825b8d7a4906b42f78117
+//         6fe90637f2698a0860f5616415f447798278ec415fa3623d926286e4e0409ad7
+//         ba403a1178ec21297c176aba4e2b91604e7a22afb53ad477b1e203707e9c4d3f
+//         bc79baacb15832ada4f9c4af91669022c5a008949bbba38f53ae92a041146917
+//         ae9c49dd4a2bd5a263da2c9e4f4184958c3fcc1c722ae071882baf1cecb251f8
+//         8a9ffbc32dc9b48b9b42b4a59a6a21978ec59e93a825ca642433809b0b098fda
+//         1b9e1a0a05c41ba0a2a91d66e56755588202fab248b8afa59976a472176e9573
+//         0a678297a305a9c288116ed96e44a825a9e10e5cf6d08de4c5cc9456bee0e22d
         
-        044ae9db3d1d9e509523d7b0fe9eb8aae8c435c6860add6a537fc5b319011985
-        b5d1e306d6cf495e3c0cbb939f618b1aeaaf0a2961b974ff20cda4c94c915aa4
-        6c0f06b9f88a964beef0ce9f2bb578cfe39408c340ab68f3658ce90d4fc84491
-        c9");
+//         044ae9db3d1d9e509523d7b0fe9eb8aae8c435c6860add6a537fc5b319011985
+//         b5d1e306d6cf495e3c0cbb939f618b1aeaaf0a2961b974ff20cda4c94c915aa4
+//         6c0f06b9f88a964beef0ce9f2bb578cfe39408c340ab68f3658ce90d4fc84491
+//         c9");
 
-  let skRm = hex!("23456b644f15c3f35650958af845450ca744f66246d21150e2b49278b02650fe");
-  let _enc = hex!("02f83d55376a5f005d56f1532ec8a1e2942a75a64b258d94ee54ab236a185352
-     eecdfb3935667dd48fec4b9e6b7fc9d9324d92f42b83ae191e75f4d243b7caca
-     cdde0a84d4b1bb47f6447214e03c907ac4f59f1917fb332aac94ec82f627f280
-     982a6d73db299e7215257388779a17100d530c74fc5d4ae291238757c49e4678
-     f99d263f713d2537cb43cedb89c573a245e152fed045baa55343a3e1590a2829
-     ed5b42c5b238c584ed57af07eb4b513b3205714dd70970abb28f440f562286e9
-     23e66c19f096bf968d9beef678168a1cbb2e52b5cbac6b9e8a72b5d109df5a93
-     c5fe8ffa741d3f7035c64163528f8455aa977fda78fa3340efce01ea948f7675
-     82153884848c4c5be5cd4664c9ce250c667b49e6bb8336c8aad4edbd21c1577c
-     85afd7e5f0582ee883819c07219bfb5d34d8e5643e8b0a505aca6009288ced94
-     01f15765ef099e96d66771d002f160f890316131e804be9fb34cf730e28a1a42
-     f79a4522114d7bd7a7765e475c03cfdb660860ff23db8f990a203ab4caa58a06
-     bf4c18a5a492b140f47b4f33cfdd99e65a497deabe2ad5f4c06f54ec2bb52c9b
-     ef6552a37add9d5e1455f7222eff7c2fcb61b5a29a54fe388c1f00b13229a11d
-     cb6b2423a9fdff7576a7afdb8ddff35e9c231ba0227c99c81cf599ab23e37d7d
-     713b4b74f4ec30e790a23f3ad58123d29ad77484ed0e8da734e51c1d87bda010
-     2cb4e6edd416cc66cd0b90699115e31db39b244b9f954b8655de06a9adf0b485
-     3773b67a94116a2161880589bc745d0c2b8057936502d4f936aa9819786de214
-     e125216e593cf75ca5641c6075848bde1414ebb103d86bbeb76682a07a2958ab
-     99ebe6110fe2562c64bf81443b4babc874a54ebcbe83523c03d816f5f0d7e159
-     3432179aa3adf4ce056f6c4ca6cdcc99661bcb6459599b59315c479a2474d3bc
-     ff17a7904763383f16e8f07236c4c703a878b9184bfeeb37528173be18e28f79
-     a7050e4bf7690d5472ac679e44ae34f20d1bcf1d468e9c1187d2e7190a2d6e7e
-     4edfdefb14f35992a8c6986debfb9f00d208a5bea6c1b3b2573321d960a41154
-     6316fc5df13ffae0cf214abb19e1f774eb3888d13f8be919f96652640812fcfa
-     1c9357847ccde925cf583f255eddd3f4030a7fcdcbc9dbc38a52196c32f183ec
-     8bec10f6852e1acec443fcb8a6b4606f51bc8d67bea702712e9d79a917b522a6
-     923e1b5a0207691482446290b418ffeb39ec811e82144f28188bc95be90cf6ea
-     3f475aee6bfe0ac1d8f23595032bea0ad3e854fec5f87515873ff9534d3d63fe
-     28884f3e1ec77113315ab832b605e04fbc2c08c67b51dc19c9e470edf995bc13
-     2883167d32b1d80646e83a52596aab2867660b24fb676477372fb3be783460ac
-     0e9c679cbdc2585e450374a2149e4f6f2a0e16778e248672b12138a5e8bae21f
-     751244517f096ed46370f4792bad4729461087726eb66de827f166278ab356e6
-     ff88fb3f18001a7b8ae26c8cc1b6c93631853aeee57b595c4e3cae6119b05e53
-     453d1e702da3607d495a4f08e08a55e4b2a49e6195723ce7a6b03702ac1406ab
-     cf55cd9f24641feea6ff39077afedcf292306e44a78ec0e9d23b41b2a3cbd3a3
-     922a58883ed751d3b456ded8c7f3783b5b148c7d19c2b08406b801edd3dac7d2
-     a2af089d4e43271d9e5ee4b2508cdb81f79c296a329db6c0f045d1ed696ad48b
-     103ebbf785daabe239b1f84ba812ef53bb6cda1125d3c68f41fdba345cb82823
-     05ff5ebea3591886d7d9a0ae1af6ac5ed31abea38446f354934a42f69437d5cd
-     d3dcdca348369625e923a78161016462dbc242100eac2fdfe0b45ce4c8649930
-     6db07b7f13a26359495c2081cad2c9cd7c28a23da1414616a442a657c63d91d4
-     0bc5c6eba106788d7f398ab16545f470b5c08200517646183334f9445e212504
-     b0a684b19ca5cb1d6172e6b4c10ebc2e220ad820db9a437d56ea16c8773c45cd
-     16983924a0b6a335b8cb72094504f424823bc9123bed718b053de67f97451205
-     05724ad0ff6929ad7b57fb00c054d631b44e0014b51c7cc8e8f978ec8e10148a
-     2d8660d81e3fde150752d38478c18e6f951142b5cff4c8d2df3d21a2d6e01bbe
-     c62a54b1807ae7aae2def15c00a2369e8fb94c33c47c687238849cbf991abb94
-     61a6536aa0371279b0fb4b62f5153f94d0b92a650867e15ac655d0dc9f10d5d6
-     124c78b73c73eac18d138e9d4246b576ab97d6c0165646cd8553f310cdaab2c5
-     1282a30f0b2a5f3dd58dc918e40b105d37");
-  let _shared_secret = hex!("250dbc9910b47b6f51097fd484d3996dc8335706c006a0fce77729a51280e4c2");
-  let _key = hex!("45d95d7e3239dc99b4d8cf3b5bb1b89ed74327cc531690fb4ab03066d87a66c1");
-  let _base_nonce = hex!("c7e928d294ac6b06f9f1d34a");
-  let _exporter_secret = hex!("aaadc292e6288db742f9f9e2435e1095324ef7d9029d5c77814328ddd813eed2");
+//   let skRm = hex!("23456b644f15c3f35650958af845450ca744f66246d21150e2b49278b02650fe");
+//   let _enc = hex!("02f83d55376a5f005d56f1532ec8a1e2942a75a64b258d94ee54ab236a185352
+//      eecdfb3935667dd48fec4b9e6b7fc9d9324d92f42b83ae191e75f4d243b7caca
+//      cdde0a84d4b1bb47f6447214e03c907ac4f59f1917fb332aac94ec82f627f280
+//      982a6d73db299e7215257388779a17100d530c74fc5d4ae291238757c49e4678
+//      f99d263f713d2537cb43cedb89c573a245e152fed045baa55343a3e1590a2829
+//      ed5b42c5b238c584ed57af07eb4b513b3205714dd70970abb28f440f562286e9
+//      23e66c19f096bf968d9beef678168a1cbb2e52b5cbac6b9e8a72b5d109df5a93
+//      c5fe8ffa741d3f7035c64163528f8455aa977fda78fa3340efce01ea948f7675
+//      82153884848c4c5be5cd4664c9ce250c667b49e6bb8336c8aad4edbd21c1577c
+//      85afd7e5f0582ee883819c07219bfb5d34d8e5643e8b0a505aca6009288ced94
+//      01f15765ef099e96d66771d002f160f890316131e804be9fb34cf730e28a1a42
+//      f79a4522114d7bd7a7765e475c03cfdb660860ff23db8f990a203ab4caa58a06
+//      bf4c18a5a492b140f47b4f33cfdd99e65a497deabe2ad5f4c06f54ec2bb52c9b
+//      ef6552a37add9d5e1455f7222eff7c2fcb61b5a29a54fe388c1f00b13229a11d
+//      cb6b2423a9fdff7576a7afdb8ddff35e9c231ba0227c99c81cf599ab23e37d7d
+//      713b4b74f4ec30e790a23f3ad58123d29ad77484ed0e8da734e51c1d87bda010
+//      2cb4e6edd416cc66cd0b90699115e31db39b244b9f954b8655de06a9adf0b485
+//      3773b67a94116a2161880589bc745d0c2b8057936502d4f936aa9819786de214
+//      e125216e593cf75ca5641c6075848bde1414ebb103d86bbeb76682a07a2958ab
+//      99ebe6110fe2562c64bf81443b4babc874a54ebcbe83523c03d816f5f0d7e159
+//      3432179aa3adf4ce056f6c4ca6cdcc99661bcb6459599b59315c479a2474d3bc
+//      ff17a7904763383f16e8f07236c4c703a878b9184bfeeb37528173be18e28f79
+//      a7050e4bf7690d5472ac679e44ae34f20d1bcf1d468e9c1187d2e7190a2d6e7e
+//      4edfdefb14f35992a8c6986debfb9f00d208a5bea6c1b3b2573321d960a41154
+//      6316fc5df13ffae0cf214abb19e1f774eb3888d13f8be919f96652640812fcfa
+//      1c9357847ccde925cf583f255eddd3f4030a7fcdcbc9dbc38a52196c32f183ec
+//      8bec10f6852e1acec443fcb8a6b4606f51bc8d67bea702712e9d79a917b522a6
+//      923e1b5a0207691482446290b418ffeb39ec811e82144f28188bc95be90cf6ea
+//      3f475aee6bfe0ac1d8f23595032bea0ad3e854fec5f87515873ff9534d3d63fe
+//      28884f3e1ec77113315ab832b605e04fbc2c08c67b51dc19c9e470edf995bc13
+//      2883167d32b1d80646e83a52596aab2867660b24fb676477372fb3be783460ac
+//      0e9c679cbdc2585e450374a2149e4f6f2a0e16778e248672b12138a5e8bae21f
+//      751244517f096ed46370f4792bad4729461087726eb66de827f166278ab356e6
+//      ff88fb3f18001a7b8ae26c8cc1b6c93631853aeee57b595c4e3cae6119b05e53
+//      453d1e702da3607d495a4f08e08a55e4b2a49e6195723ce7a6b03702ac1406ab
+//      cf55cd9f24641feea6ff39077afedcf292306e44a78ec0e9d23b41b2a3cbd3a3
+//      922a58883ed751d3b456ded8c7f3783b5b148c7d19c2b08406b801edd3dac7d2
+//      a2af089d4e43271d9e5ee4b2508cdb81f79c296a329db6c0f045d1ed696ad48b
+//      103ebbf785daabe239b1f84ba812ef53bb6cda1125d3c68f41fdba345cb82823
+//      05ff5ebea3591886d7d9a0ae1af6ac5ed31abea38446f354934a42f69437d5cd
+//      d3dcdca348369625e923a78161016462dbc242100eac2fdfe0b45ce4c8649930
+//      6db07b7f13a26359495c2081cad2c9cd7c28a23da1414616a442a657c63d91d4
+//      0bc5c6eba106788d7f398ab16545f470b5c08200517646183334f9445e212504
+//      b0a684b19ca5cb1d6172e6b4c10ebc2e220ad820db9a437d56ea16c8773c45cd
+//      16983924a0b6a335b8cb72094504f424823bc9123bed718b053de67f97451205
+//      05724ad0ff6929ad7b57fb00c054d631b44e0014b51c7cc8e8f978ec8e10148a
+//      2d8660d81e3fde150752d38478c18e6f951142b5cff4c8d2df3d21a2d6e01bbe
+//      c62a54b1807ae7aae2def15c00a2369e8fb94c33c47c687238849cbf991abb94
+//      61a6536aa0371279b0fb4b62f5153f94d0b92a650867e15ac655d0dc9f10d5d6
+//      124c78b73c73eac18d138e9d4246b576ab97d6c0165646cd8553f310cdaab2c5
+//      1282a30f0b2a5f3dd58dc918e40b105d37");
+//   let _shared_secret = hex!("250dbc9910b47b6f51097fd484d3996dc8335706c006a0fce77729a51280e4c2");
+//   let _key = hex!("45d95d7e3239dc99b4d8cf3b5bb1b89ed74327cc531690fb4ab03066d87a66c1");
+//   let _base_nonce = hex!("c7e928d294ac6b06f9f1d34a");
+//   let _exporter_secret = hex!("aaadc292e6288db742f9f9e2435e1095324ef7d9029d5c77814328ddd813eed2");
 
-  let seed2 = <shake::Shake256 as kdfs::Kdf<U32>>::derive_secret_others(&ikmR, [LabelHpkeV1::LABEL, &LabelKem::<kem_id::QsfKemMlKem1024P384Shake256Sha3256>::LABEL, &LabelKeyDerive::LABEL, &U32::U16.to_be_bytes() ]);
-  assert_eq! ( seed2.as_slice(), skRm);
+//   let seed2 = <shake::Shake256 as kdfs::Kdf<U32>>::derive_secret_others(&ikmR, [LabelHpkeV1::LABEL, &LabelKem::<kem_id::QsfKemMlKem1024P384Shake256Sha3256>::LABEL, &LabelKeyDerive::LABEL, &U32::U16.to_be_bytes() ]);
+//   assert_eq! ( seed2.as_slice(), skRm);
 
-//let decryptor2 = HpkeQsfP384MlKem1024Shake256Aes256Gcm::decryptor_from_bytes(skRm.as_slice().into());
+// //let decryptor2 = HpkeQsfP384MlKem1024Shake256Aes256Gcm::decryptor_from_bytes(skRm.as_slice().into());
 
-  let (encryptor, decryptor) = HpkeIesMlKem1024P384Shake256Aes256Gcm::derive_pair_from_seed(&ikmR).unwrap();
-  //let (encryptor, decryptor) = kems::draft_ietf_hpke_pq_01::HybridKemQsfP384MlKem1024::derive_from_seed(&seed2);
-  //assert_eq!( decryptor.as_bytes().as_slice(), skRm);
-  println!( "pk={:02X?}", encryptor.get_encapsulator().to_bytes());
-    assert_eq!( encryptor.get_encapsulator().to_bytes().as_slice(), pkRm.as_slice());
-    assert_eq!( decryptor.get_decapsulator().to_bytes(), skRm);
+//   let (encryptor, decryptor) = HpkeIesMlKem1024P384Shake256Aes256Gcm::derive_pair_from_seed(&ikmR).unwrap();
+//   //let (encryptor, decryptor) = kems::draft_ietf_hpke_pq_01::HybridKemQsfP384MlKem1024::derive_from_seed(&seed2);
+//   //assert_eq!( decryptor.as_bytes().as_slice(), skRm);
+//   println!( "pk={:02X?}", encryptor.get_encapsulator().to_bytes());
+//     assert_eq!( encryptor.get_encapsulator().to_bytes().as_slice(), pkRm.as_slice());
+//     assert_eq!( decryptor.get_decapsulator().to_bytes(), skRm);
 
-//   let decryptor2 = HpkeQsfP384MlKem1024Shake256Aes256Gcm::decryptor_from_bytes(skRm.as_slice().into());
-//   assert_eq!( decryptor2.decapsulator.as_bytes().as_slice(), skRm);
+// //   let decryptor2 = HpkeQsfP384MlKem1024Shake256Aes256Gcm::decryptor_from_bytes(skRm.as_slice().into());
+// //   assert_eq!( decryptor2.decapsulator.as_bytes().as_slice(), skRm);
 
-//   let mut decryptor3 = decryptor.setup_receiver_cipher(enc.as_slice().into(), &info, None).unwrap();
-// // A.5.1.1.  Encryptions
+// //   let mut decryptor3 = decryptor.setup_receiver_cipher(enc.as_slice().into(), &info, None).unwrap();
+// // // A.5.1.1.  Encryptions
 
-// // sequence number: 0
-//   let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
-//   let aad = hex!("436f756e742d30");
-//   let nonce = hex!("c7e928d294ac6b06f9f1d34a");
-//   let ct = hex!("db5a0fa80eb3481c985374e459afba1ebf2b4358964a3d5bee3833c6250c7fd1
-//     a73fdc53d0faa3847524a780c2a068d3d618860c38c6547a0134972cd8abbf4d
-//     f3949b0aed6f8d574262");
-//   let pt2 = decryptor3.open(Payload{msg: &ct, aad: &aad }).unwrap();
-//   assert_eq! ( pt.as_slice(), pt2.as_slice());
+// // // sequence number: 0
+// //   let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
+// //   let aad = hex!("436f756e742d30");
+// //   let nonce = hex!("c7e928d294ac6b06f9f1d34a");
+// //   let ct = hex!("db5a0fa80eb3481c985374e459afba1ebf2b4358964a3d5bee3833c6250c7fd1
+// //     a73fdc53d0faa3847524a780c2a068d3d618860c38c6547a0134972cd8abbf4d
+// //     f3949b0aed6f8d574262");
+// //   let pt2 = decryptor3.open(Payload{msg: &ct, aad: &aad }).unwrap();
+// //   assert_eq! ( pt.as_slice(), pt2.as_slice());
 
-// //sequence number: 1
-//   let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
-//   let aad = hex!("436f756e742d31");
-//   let nonce = hex!("c7e928d294ac6b06f9f1d34b");
-//   let ct = hex!("34cca436f7f47a76c1cbf0b3cd03adb8cb887b6bb4c16d29e808d303a34e3d3b
-//     78d460f5abf08047f30fd35dd80e46629044a6dfbf163bbf7735d8f6452675f4
-//     9b7bc245dc39c8cba716");
-//   let pt2 = decryptor3.open(Payload{msg: &ct, aad: &aad }).unwrap();
-//   assert_eq! ( pt.as_slice(), pt2.as_slice());
+// // //sequence number: 1
+// //   let pt = hex!("34323635363137353734373932303639373332303734373237353734363832633230373437323735373436383230363236353631373537343739");
+// //   let aad = hex!("436f756e742d31");
+// //   let nonce = hex!("c7e928d294ac6b06f9f1d34b");
+// //   let ct = hex!("34cca436f7f47a76c1cbf0b3cd03adb8cb887b6bb4c16d29e808d303a34e3d3b
+// //     78d460f5abf08047f30fd35dd80e46629044a6dfbf163bbf7735d8f6452675f4
+// //     9b7bc245dc39c8cba716");
+// //   let pt2 = decryptor3.open(Payload{msg: &ct, aad: &aad }).unwrap();
+// //   assert_eq! ( pt.as_slice(), pt2.as_slice());
 
-//   let decryptor4 = decryptor.setup_receiver_export(enc.as_slice().into(), &info, None).unwrap();
+// //   let decryptor4 = decryptor.setup_receiver_export(enc.as_slice().into(), &info, None).unwrap();
    
-//   // A.5.1.2.  Exported Values
-//   let exporter_context = hex!("70736575646f72616e646f6d30");
-//   //L: 32
-//   let exported_value = hex!("95ccd83cfd9722eb5d9229d3a1e66c0b6910f30adb6bf1a5550692bd5ad480ec");
-//   let exporter_value2 = decryptor4.export::<U32>(&exporter_context);
-//   assert_eq! ( exporter_value2, exported_value);
+// //   // A.5.1.2.  Exported Values
+// //   let exporter_context = hex!("70736575646f72616e646f6d30");
+// //   //L: 32
+// //   let exported_value = hex!("95ccd83cfd9722eb5d9229d3a1e66c0b6910f30adb6bf1a5550692bd5ad480ec");
+// //   let exporter_value2 = decryptor4.export::<U32>(&exporter_context);
+// //   assert_eq! ( exporter_value2, exported_value);
 
 
-//   let exporter_context = hex!("70736575646f72616e646f6d31");
-//   //L: 32
-//   let exported_value = hex!("a64c081fdac68d7d75a705489019e16c819f9129f217207b9ea440651cc66ade");
-//   let exporter_value2 = decryptor4.export::<U32>(&exporter_context);
-//   assert_eq! ( exporter_value2, exported_value);
-}
+// //   let exporter_context = hex!("70736575646f72616e646f6d31");
+// //   //L: 32
+// //   let exported_value = hex!("a64c081fdac68d7d75a705489019e16c819f9129f217207b9ea440651cc66ade");
+// //   let exporter_value2 = decryptor4.export::<U32>(&exporter_context);
+// //   assert_eq! ( exporter_value2, exported_value);
+// }
 
