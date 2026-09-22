@@ -9,7 +9,7 @@
 //! use aead::Payload;
 //! use rand_core::OsRng;
 //! 
-//! let recipient_secret_key = StaticSecret::random_from_rng(&mut OsRng);
+//! let recipient_secret_key = StaticSecret::random();
 //! let recipient_public_key = PublicKey::from(&recipient_secret_key);
 //! let plaintext = b"Hello World!";
 //! let aad = b"Some other data";
@@ -481,7 +481,7 @@ where C: Kem + KemParams,
     /// 
     pub fn setup_receiver_cipher(
         &self, 
-        ct: &ml_kem::kem::Ciphertext<C>, //Ciphertext<C>,
+        ct: &Ciphertext<C>, //Ciphertext<C>,
         info: &[u8],
         psk: Option<Psk>,
     ) -> Result<HpkeCipherContext<A>, Error>
