@@ -101,7 +101,7 @@ fn test_draft_ietf_hpke_pq_04_a_1 () {
     assert_eq!( &enc_calc2.as_ref(), &enc);
     assert_eq!( shared_secret2, shared_secret);
 
-    let encryptor2 = HpkeIesMlKem512Sha256Aes128Gcm::encryptor_from_bytes(&pkRm.into());
+    let encryptor2 = HpkeIesMlKem512Sha256Aes128Gcm::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(encryptor2.get_encapsulator().to_bytes().as_slice(), &pkRm);
     
     let (enc_calc, mut send_cipher_ctx) = encryptor2.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
@@ -265,7 +265,7 @@ fn test_draft_ietf_hpke_pq_04_a_2 () {
     assert_eq!( &enc_calc2.as_ref(), &enc);
     assert_eq!( shared_secret2, shared_secret);
     
-    let encryptor2 = HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_bytes(&pkRm.into());
+    let encryptor2 = HpkeIesMlKem768Sha256Aes128Gcm::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(encryptor2.get_encapsulator().to_bytes().as_slice(), &pkRm);
     
     let (enc_calc, mut send_cipher_ctx) = encryptor2.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
@@ -462,7 +462,7 @@ fn test_draft_ietf_hpke_pq_04_a_3 () {
     assert_eq!( &enc_calc2.as_ref(), &enc);
     assert_eq!( shared_secret2, shared_secret);
     
-    let encryptor2 = HpkeIesMlKem1024Sha384Aes256Gcm::encryptor_from_bytes(&pkRm.into());
+    let encryptor2 = HpkeIesMlKem1024Sha384Aes256Gcm::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(encryptor2.get_encapsulator().to_bytes().as_slice(), &pkRm);
     
     let (enc_calc, mut send_cipher_ctx) = encryptor2.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
@@ -637,7 +637,7 @@ fn test_draft_ietf_hpke_pq_04_a_4 () {
     assert_eq!( &enc_calc2.as_ref(), &enc);
     assert_eq!( shared_secret2, shared_secret);
 
-    let encryptor2 = HpkeIesMlKem768P256HkdfSha256Aes128Gcm::encryptor_from_bytes(&pkRm.into());
+    let encryptor2 = HpkeIesMlKem768P256HkdfSha256Aes128Gcm::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(encryptor2.get_encapsulator().to_bytes(), pkRm);
     
     let (enc_calc, mut send_cipher_ctx) = encryptor2.setup_sender_cipher_deterministic(&ikmE[..64], &info, None).unwrap();
@@ -804,7 +804,7 @@ fn test_draft_ietf_hpke_pq_04_a_5 () {
     assert_eq!(encryptor.get_encapsulator().to_bytes(), pkRm);
     assert_eq!(decryptor.get_decapsulator().to_bytes(), skRm);
     
-    let encryptor2 = HpkeIesMlKem768X25519Shake128ChaCha20Poly1305::encryptor_from_bytes(&pkRm.into());
+    let encryptor2 = HpkeIesMlKem768X25519Shake128ChaCha20Poly1305::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(encryptor2.get_encapsulator().to_bytes(), pkRm);
     
     let (enc_calc, mut send_cipher_ctx) = encryptor2.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
@@ -1002,7 +1002,7 @@ fn test_draft_ietf_hpke_pq_04_a_6 () {
     assert_eq!(encryptor.get_encapsulator().to_bytes(), pkRm );
     assert_eq!(decryptor.get_decapsulator().to_bytes(), skRm);
     
-    let encryptor2 = HpkeIesMlKem1024P384HkdfSha256Aes256Gcm::encryptor_from_bytes(&pkRm.into());
+    let encryptor2 = HpkeIesMlKem1024P384HkdfSha256Aes256Gcm::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(encryptor2.get_encapsulator().to_bytes(), pkRm);
     
     let (enc_calc, mut send_cipher_ctx) = encryptor2.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
@@ -1298,7 +1298,7 @@ fn test_draft_ietf_hpke_pq_04_a_9 () {
     assert_eq!(encryptor.get_encapsulator().to_bytes().as_slice(), &pkRm );
     assert_eq!(decryptor.get_decapsulator().to_bytes().as_slice(), &skRm);
     
-    let encryptor2 = HpkeIesX25519TurboShake128ChaCha20Poly1305::encryptor_from_bytes(&pkRm.into());
+    let encryptor2 = HpkeIesX25519TurboShake128ChaCha20Poly1305::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(encryptor2.get_encapsulator().to_bytes().as_slice(), &pkRm);
 
     // Convert ikmE into skmE for input to encapsulate_deterministic
@@ -1408,7 +1408,7 @@ fn test_draft_ietf_hpke_pq_04_a_10 () {
     assert_eq!(encryptor.get_encapsulator().to_bytes().as_slice(), &pkRm );
     assert_eq!(decryptor.get_decapsulator().to_bytes().as_slice(), &skRm);
     
-    let encryptor2 = HpkeIesX448TurboShake256ChaCha20Poly1305::encryptor_from_bytes(&pkRm.into());
+    let encryptor2 = HpkeIesX448TurboShake256ChaCha20Poly1305::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(encryptor2.get_encapsulator().to_bytes().as_slice(), &pkRm);
 
     // Convert ikmE into skmE for input to encapsulate_deterministic
@@ -1587,7 +1587,7 @@ fn test_draft_ietf_hpke_pq_04_a_11 () {
     assert_eq!( &enc_calc2.as_ref(), &enc);
     assert_eq!( shared_secret2, shared_secret);
     
-    let he_encryptor = HpkeIesMlKem768P256Shake128Aes256Gcm::encryptor_from_bytes(&pkRm.into());
+    let he_encryptor = HpkeIesMlKem768P256Shake128Aes256Gcm::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     assert_eq!(he_encryptor.get_encapsulator().to_bytes(), pkRm);
     
     
@@ -1753,7 +1753,7 @@ fn test_draft_ietf_hpke_pq_04_a_12 () {
     assert_eq! ( c0_calc.as_ref(), enc );
     assert_eq! ( k_calc, shared_secret );
 
-    let he_encryptor = HpkeIesMlKem768X25519Shake256Cha20Poly1305::encryptor_from_bytes(&pkRm.into());
+    let he_encryptor = HpkeIesMlKem768X25519Shake256Cha20Poly1305::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     
     let (enc_calc, mut send_cipher_ctx) = he_encryptor.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
     assert_eq!( &enc_calc.as_ref(), &enc);
@@ -1928,7 +1928,7 @@ fn test_draft_ietf_hpke_pq_04_a_13 () {
     assert_eq! ( c0_calc.as_ref(), enc );
     assert_eq! ( k_calc, shared_secret );
 
-    let he_encryptor = HpkeIesMlKem1024TurboShake256Aes128Gcm::encryptor_from_bytes(&pkRm.into());
+    let he_encryptor = HpkeIesMlKem1024TurboShake256Aes128Gcm::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     
     let (enc_calc, mut send_cipher_ctx) = he_encryptor.setup_sender_cipher_deterministic(&ikmE, &info, None).unwrap();
     assert_eq!( &enc_calc.as_ref(), &enc);

@@ -1,10 +1,10 @@
 use std::{fmt::Debug, marker::PhantomData};
 
-use crate::{KemParams, hpke_kdf::{LabelHpkeV1, LabelKem, LabelKemExpand, LabelKemExtract, LabelKeyDerive, LabelKeyGenCandidate, LabelKeyGenExpand, LabelKeyGenExtract}};
+use crate::{KemParams, hpke_kdf::{LabelHpkeV1, LabelKem, LabelKeyDerive}};
 
 use digest::typenum::Unsigned;
 use kdfs::{KdfFixed, Kdf, Label, TwoStepKdf};
-use kem::{Ciphertext, Decapsulator, Encapsulate, EncapsulationKey, FromSeed, Generate, Kem, Key, KeyExport, KeyInit, KeySizeUser, SharedKey, TryDecapsulate, TryKeyInit};
+use kem::{Ciphertext, Decapsulator, Encapsulate, EncapsulationKey, FromSeed, Generate, InvalidKey, Kem, Key, KeyExport, KeyInit, KeySizeUser, SharedKey, TryDecapsulate, TryKeyInit};
 use kems::{Array, ArraySize, EncapsulateDeterministic, FromKey, FromKeys};
 
 ///
@@ -21,9 +21,9 @@ where K::Extract: KdfFixed,
     K::Expand: Kdf<L>
 {
     fn derive_self_secrets_others<'a,'b> ( &self, secret: impl IntoIterator<Item=&'a[u8]> + Clone, _other_data: impl IntoIterator<Item=&'b[u8]> + Clone) -> Array<u8, L> {
-        let dkp_prk = K::Extract::default().derive_self_secrets_others_fixed( secret, [LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, LabelKeyGenExtract::LABEL]);
+        let dkp_prk = K::Extract::default().derive_self_secrets_others_fixed( secret, [LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, b"dkp_prk"]);
 
-        let mut out = K::Expand::default().derive_self_secrets_others(std::iter::once(dkp_prk.as_ref()), [&L::U16.to_be_bytes(),LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, LabelKeyGenCandidate::LABEL, &[0u8]]);
+        let mut out = K::Expand::default().derive_self_secrets_others(std::iter::once(dkp_prk.as_ref()), [&L::U16.to_be_bytes(),LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, b"candidate", &[0u8]]);
         out[0] = out[0] & BITMASK;        
         out
     }
@@ -43,8 +43,8 @@ where K::Extract: KdfFixed,
     K::Expand: Kdf<L>
 {
     fn derive_self_secrets_others<'a,'b> ( &self, secret: impl IntoIterator<Item=&'a[u8]> + Clone, _other_data: impl IntoIterator<Item=&'b[u8]> + Clone) -> Array<u8, L> {
-        let secret = K::Extract::default().derive_self_secrets_others_fixed(secret, [LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, LabelKeyGenExtract::LABEL]);
-        K::Expand::default().derive_self_secret_others(secret.as_ref(), [&L::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, LabelKeyGenExpand::LABEL])
+        let secret = K::Extract::default().derive_self_secrets_others_fixed(secret, [LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, b"dkp_prk"]);
+        K::Expand::default().derive_self_secret_others(secret.as_ref(), [&L::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, b"sk"])
     }
 }
 
@@ -62,13 +62,13 @@ where K::Extract: KdfFixed,
     K::Expand: Kdf<L>,
 {
     fn derive_self_secrets_others<'a,'b> ( &self, secret: impl IntoIterator<Item=&'a[u8]> + Clone, other_data: impl IntoIterator<Item=&'b[u8]> + Clone) -> Array<u8, L> {
-        let secret = K::Extract::default().derive_self_secrets_others_fixed( secret, [LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, LabelKemExtract::LABEL]);
+        let secret = K::Extract::derive_secrets_others_fixed( secret, [LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, b"eae_prk"]);
         
         let mut other_data_iter = other_data.into_iter();
         let ct = other_data_iter.next().unwrap_or_default();
         let pk = other_data_iter.next().unwrap_or_default();
         
-        K::Expand::derive_secret_others(secret.as_ref(), [&L::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, LabelKemExpand::LABEL, ct, pk])
+        K::Expand::derive_secret_others(secret.as_ref(), [&L::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<I>::LABEL, b"shared_secret", ct, pk])
 
     }
 }
@@ -84,10 +84,9 @@ pub struct OneStageSeedDiversify<K,I> (PhantomData<K>, PhantomData<I>);
 impl <K: Kdf<L> + Default, I: Unsigned, L: ArraySize> Kdf<L> for OneStageSeedDiversify<K,I>
 {
     fn derive_self_secrets_others<'a,'b> ( &self, secret: impl IntoIterator<Item=&'a[u8]> + Clone, _other_data: impl IntoIterator<Item=&'b[u8]> + Clone) -> Array<u8, L> {
-        K::default().derive_self_secrets_others(secret, [LabelHpkeV1::LABEL, &LabelKem::<I>::LABEL, &LabelKeyDerive::LABEL, &L::U16.to_be_bytes() ])
+        K::derive_secrets_others(secret, [LabelHpkeV1::LABEL, &LabelKem::<I>::LABEL, &LabelKeyDerive::LABEL, &L::U16.to_be_bytes() ])
     }
 }
-
 
 
 
@@ -122,9 +121,9 @@ where K: Kem + FromSeed,
     type SeedSize = K::SeedSize;
 
     fn from_seed(seed: &kem::Seed<Self>) -> (kem::DecapsulationKey<Self>, kem::EncapsulationKey<Self>) {
-        let seed_2 = <Self as KemParams>::KeyGenFromSeed::derive_secret_others(&seed, None);
+        let derived_seed = <Self as KemParams>::KeyGenFromSeed::derive_secret_others(&seed, None);
         
-        let (decap, encap) = K::from_seed(&seed_2);
+        let (decap, encap) = K::from_seed(&derived_seed);
         let hpke_encap = HpkeEcKemEncapsulationKey::<K>(encap);
         (HpkeEcKemDecapsulationKey::<K>{decap, hpke_encap: hpke_encap.clone()}, hpke_encap)
     }
@@ -302,10 +301,10 @@ impl<K> TryFrom<&[u8]> for HpkeEcKemEncapsulationKey<K>
 where K:Kem,
     K::EncapsulationKey: TryKeyInit
 {
-    type Error = ();
+    type Error = InvalidKey;
     
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self(<K::EncapsulationKey as TryKeyInit>::new_from_slice(value).unwrap()))
+        Ok(Self(<K::EncapsulationKey as TryKeyInit>::new_from_slice(value)?))
     }
 }
 impl<K> KeyInit for HpkeEcKemEncapsulationKey<K>
@@ -338,7 +337,7 @@ where K: Kem,
     
     <HpkeKemWrapper<K> as KemParams>::EncapsulateFromSeed: Kdf<<K::EncapsulationKey as EncapsulateDeterministic>::SeedSize>,
 {
-    type Kem = HpkeKemWrapper<K>;
+    //type Kem = HpkeKemWrapper<K>;
     type SeedSize = <K::EncapsulationKey as EncapsulateDeterministic>::SeedSize;
 
     fn encapsulate_deterministic(&self, seed: &[u8]) -> (Ciphertext<Self::Kem>, SharedKey<Self::Kem>) {

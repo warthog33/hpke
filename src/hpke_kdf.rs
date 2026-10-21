@@ -7,11 +7,12 @@
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
 
-use crate::mode_id;
+use crate::{mode_id};
 
 use aead::array::typenum::{Diff, Sum, Unsigned};
-use kdfs::{Kdf, KdfFixed, Label, TwoStepKdf};
+use kdfs::{Kdf, KdfFixed, SaltedKdfFixed, Label, TwoStepKdf};
 use kdfs::hybrid_array::{Array, ArraySize};
+use kem::KeySizeUser;
 
 
 
@@ -32,28 +33,28 @@ impl<KemId: Unsigned> Label for LabelKem<KemId>
 }
 
 /// Label used for the extract function in the KEM, used to derive the extracted secret from the shared secret and other inputs
-#[derive(Clone)]
-pub struct LabelKemExtract ();
-impl Label for LabelKemExtract
-{
-    const LABEL: &[u8] = b"eae_prk";
-}
+// #[derive(Clone)]
+// pub struct LabelKemExtract ();
+// impl Label for LabelKemExtract
+// {
+//     const LABEL: &[u8] = b"eae_prk";
+// }
 
 /// Label used for the expand function in the KEM, used to derive the shared secret from the extracted secret
-#[derive(Clone)]
-pub struct LabelKemExpand ();
-impl Label for LabelKemExpand
-{
-    const LABEL: &[u8] = b"shared_secret";
-}
+// #[derive(Clone)]
+// pub struct LabelKemExpand ();
+// impl Label for LabelKemExpand
+// {
+//     const LABEL: &[u8] = b"shared_secret";
+// }
 
 /// Label used for the extract function in the key generation functions, used to derive a secret from the shared secret and other inputs which is then used to generate candidate keys
-#[derive(Clone)]
-pub struct LabelKeyGenExtract ();
-impl Label for LabelKeyGenExtract
-{
-    const LABEL: &[u8] = b"dkp_prk";
-}
+// #[derive(Clone)]
+// pub struct LabelKeyGenExtract ();
+// impl Label for LabelKeyGenExtract
+// {
+//     const LABEL: &[u8] = b"dkp_prk";
+// }
 
 /// Label used for the expand function in the key generation functions, used to derive a secret from the shared secret and other inputs which is then used to generate candidate keys
 pub struct LabelKeyDerive ();
@@ -63,38 +64,38 @@ impl Label for LabelKeyDerive
 }
 
 /// Label used for the expand function in the key generation functions, used to derive a secret from the shared secret and other inputs which is then used to generate candidate keys
-#[derive(Clone)]
-pub struct LabelKeyGenExpand ();
-impl Label for LabelKeyGenExpand
-{
-    const LABEL: &[u8] = b"sk";
-}
+// #[derive(Clone)]
+// pub struct LabelKeyGenExpand ();
+// impl Label for LabelKeyGenExpand
+// {
+//     const LABEL: &[u8] = b"sk";
+// }
 
 /// Label used for the expand function in the key generation functions, used to derive a secret from the shared secret and other inputs which is then used to generate candidate keys
-pub struct LabelSec ();
-impl Label for LabelSec
-{
-    const LABEL: &[u8] = b"sec";
-}
+// pub struct LabelSec ();
+// impl Label for LabelSec
+// {
+//     const LABEL: &[u8] = b"sec";
+// }
 
-pub struct LabelSecret ();
-impl Label for LabelSecret
-{
-    const LABEL: &[u8] = b"secret";
-}
+// pub struct LabelSecret ();
+// impl Label for LabelSecret
+// {
+//     const LABEL: &[u8] = b"secret";
+// }
 
 /// Label used for the KDF in the key generation functions, used to derive a secret from the shared secret and other inputs which is then used to generate candidate keys
-pub struct LabelKeyGenCandidate ();
-impl Label for LabelKeyGenCandidate
-{
-    const LABEL: &[u8] = b"candidate";
-}
+// pub struct LabelKeyGenCandidate ();
+// impl Label for LabelKeyGenCandidate
+// {
+//     const LABEL: &[u8] = b"candidate";
+// }
 
-pub struct LabelPskIdHash ();
-impl Label for LabelPskIdHash
-{
-    const LABEL: &[u8] = b"psk_id_hash";
-}
+// pub struct LabelPskIdHash ();
+// impl Label for LabelPskIdHash
+// {
+//     const LABEL: &[u8] = b"psk_id_hash";
+// }
 
 /// Label used for the KDF in the key generation functions, used to derive a secret from the shared secret and other inputs which is then used to generate candidate keys
 pub struct LabelKdf<KemId: Unsigned, KdfId: Unsigned, AeadId: Unsigned> ( PhantomData<KemId>, PhantomData<KdfId>, PhantomData<AeadId>);
@@ -114,34 +115,28 @@ impl<KemId: Unsigned, KdfId: Unsigned, AeadId: Unsigned> Label for LabelKdf <Kem
 
 
 
-pub trait HpkeExporterSecret {
-    type ExporterSecretSize: ArraySize;
-}
+// pub trait KeySizeUser {
+//     type KeySize: ArraySize;
+// }
 /// Trait definition for a kdf suitable for use within Hpke
 /// Only two methods are defined
 ///  1. derive, which returns the key, nonce and expoert_secrets from the shared_secet, info and psk
 ///  2. export_secret, which returns an exporter value derived from the exporter_secret
-pub trait HpkeKdf<LK: ArraySize, LN: ArraySize> : HpkeExporterSecret//: From<Self::K>
+pub trait HpkeKdf<LK: ArraySize, LN: ArraySize> : KeySizeUser
 {
-    //type K: Default;
-    //type ExporterSize: ArraySize;
-    
     fn derive<'a, LB: Label> ( is_auth: bool, shared_secret: &'a[u8], info: &'a[u8], psk: Option<Psk> ) 
-        -> (Array<u8,LK>, Array<u8,LN>, Array<u8,Self::ExporterSecretSize>);
+        -> (Array<u8,LK>, Array<u8,LN>, Array<u8,Self::KeySize>);
 }
 
-pub trait HpkeKdfExporter<L>  : HpkeExporterSecret//: From<Self::K>
+pub trait HpkeKdfExporter<L>  : KeySizeUser//: From<Self::K>
 where L: ArraySize
 {
-    //type K: Default;
-    //type LE: ArraySize;
-
-    fn derive_exported_value(exporter_secret: &Array<u8, Self::ExporterSecretSize>, exporter_context: &[u8], label: &'static [u8]) -> Array<u8,L>;
+    fn derive_exported_value(exporter_secret: &Array<u8, Self::KeySize>, exporter_context: &[u8], label: &'static [u8]) -> Array<u8,L>;
 }
 
 pub trait Export<L: ArraySize>
 {
-    fn export<'a : 'b,'b>(&'a self, exporter_context: &[u8] ) -> Array<u8, L>;
+    fn export(&self, exporter_context: &[u8] ) -> Array<u8, L>;
 }
 
 ///
@@ -182,50 +177,32 @@ impl<'id, 'val> Default for Psk<'id, 'val> {
 /// It uses a two step kdf with extract and expand functions used to determine the output values
 /// 
 pub struct HpkeTwoStageKdf<K: TwoStepKdf> 
-where K: TwoStepKdf,
-     <K::Extract as KdfFixed>::OutputSize: ArraySize
+where <K::Extract as KdfFixed>::OutputSize: ArraySize
 {
-    //kdf: K
-    kdf: PhantomData<K>
+    phantom: PhantomData<K>
 }
 
 
-// impl<K: TwoStepKdf> From<K> for HpkeTwoStageKdf<K>
-// {
-//     fn from(kdf: K) -> Self {
-//         Self{kdf: PhantomData}
-//     }
-// }
 impl<K: TwoStepKdf + Default> Default for HpkeTwoStageKdf<K>
 {
     fn default() -> Self {
-        Self{kdf: PhantomData} //Self{kdf: K::default()}
+        Self{phantom: PhantomData}
     }
 }
 
-impl<K: TwoStepKdf> HpkeExporterSecret for HpkeTwoStageKdf<K>
+impl<K: TwoStepKdf> KeySizeUser for HpkeTwoStageKdf<K>
 {
-    type ExporterSecretSize = <K::Extract as KdfFixed>::OutputSize;
+    type KeySize = <K::Extract as KdfFixed>::OutputSize;
 }
 impl<K,LK,LN> HpkeKdf<LK,LN> for HpkeTwoStageKdf<K> 
 where   K: TwoStepKdf + 'static + Default,
         <K::Extract as KdfFixed>::OutputSize: ArraySize,
-        // K::Extract: KdfLabelled,
-        // K::Expand: KdfLabelled,
-        //K: GetExtract<T=K::Extract>,
-        //K: GetExpand<T=K::Expand>,
         K::Expand: Kdf<LK> + Kdf<LN> + Kdf<<K::Extract as KdfFixed>::OutputSize>,
         LN: ArraySize + Add<<K::Extract as KdfFixed>::OutputSize>,
-        LK: ArraySize + Add<<LN as Add<<K::Extract as KdfFixed>::OutputSize>>::Output>,
-        Diff<Diff<Sum<LK, Sum<LN, <K::Extract as KdfFixed>::OutputSize>>, LK>, LN>: ArraySize, <LK as Add<<LN as Add<<<K as TwoStepKdf>::Extract as KdfFixed>::OutputSize>>::Output>>::Output: Sub<LK>, <<LK as Add<<LN as Add<<<K as TwoStepKdf>::Extract as KdfFixed>::OutputSize>>::Output>>::Output as Sub<LK>>::Output: Sub<LN>,
+        LK: ArraySize + Add<Sum<LN,<K::Extract as KdfFixed>::OutputSize>>,
 {
-    /// Exporter secret length, for TwoStepKdfs this is the length of the extracted secret
-    //type ExporterSize = <K::Extract as KdfFixed>::OutputSize;
-    /// Kdf type, this is used to allow the Kdf to be used as part of a KEM or KDF which requires a specific Kdf type
-    //type K = K;
-
-    fn derive<'a, /*LK: ArraySize, LN: ArraySiz LE: ArraySize,e,*/ LB: Label> ( is_auth: bool, shared_secret: &'a[u8], info: &'a[u8], psk: Option<Psk> ) 
-        -> (Array<u8,LK>, Array<u8,LN>, Array<u8,Self::ExporterSecretSize>)
+    fn derive<'a, SuiteId: Label> ( is_auth: bool, shared_secret: &'a[u8], info: &'a[u8], psk: Option<Psk> ) 
+        -> (Array<u8,LK>, Array<u8,LN>, Array<u8,Self::KeySize>)
     {
         let mode = match (is_auth, psk.is_some()) {
             (false, false) => mode_id::MODE_BASE,
@@ -235,13 +212,13 @@ where   K: TwoStepKdf + 'static + Default,
         };
         let psk = psk.unwrap_or_default();
 
-        let psk_id_hash: Array<u8, Self::ExporterSecretSize> = K::Extract::derive_secret_others_fixed( psk.id, [LabelHpkeV1::LABEL, LB::LABEL, b"psk_id_hash"] );
-        let info_hash: Array<u8, Self::ExporterSecretSize> = K::Extract::derive_secret_others_fixed( info, [LabelHpkeV1::LABEL, LB::LABEL, b"info_hash"]);
-        let secret: Array<u8, Self::ExporterSecretSize> = K::Extract::derive_secrets_salt_others_fixed( Some(psk.val), shared_secret, [LabelHpkeV1::LABEL, LB::LABEL, b"secret"]);
+        let psk_id_hash: Array<u8, Self::KeySize> = K::Extract::derive_secret_others_fixed( psk.id, [LabelHpkeV1::LABEL, SuiteId::LABEL, b"psk_id_hash"] );
+        let info_hash: Array<u8, Self::KeySize> = K::Extract::derive_secret_others_fixed( info, [LabelHpkeV1::LABEL, SuiteId::LABEL, b"info_hash"]);
+        let secret: Array<u8, Self::KeySize> = K::Extract::derive_secrets_salt_others_fixed( Some(psk.val), shared_secret, [LabelHpkeV1::LABEL, SuiteId::LABEL, b"secret"]);
 
-        let key = K::Expand::derive_secret_others(secret.as_ref(), [&LK::U16.to_be_bytes(), LabelHpkeV1::LABEL, LB::LABEL, b"key", &[mode], psk_id_hash.as_slice(), &info_hash]);
-        let base_nonce = K::Expand::derive_secret_others(secret.as_ref(), [&LN::U16.to_be_bytes(), LabelHpkeV1::LABEL, LB::LABEL, b"base_nonce", &[mode], psk_id_hash.as_slice(), &info_hash]);
-        let exporter_secret = K::Expand::derive_secret_others(secret.as_ref(), [&Self::ExporterSecretSize::U16.to_be_bytes(),LabelHpkeV1::LABEL, LB::LABEL, b"exp", &[mode], psk_id_hash.as_slice(), &info_hash]);
+        let key = K::Expand::derive_secret_others(secret.as_ref(), [&LK::U16.to_be_bytes(), LabelHpkeV1::LABEL, SuiteId::LABEL, b"key", &[mode], psk_id_hash.as_slice(), &info_hash]);
+        let base_nonce = K::Expand::derive_secret_others(secret.as_ref(), [&LN::U16.to_be_bytes(), LabelHpkeV1::LABEL, SuiteId::LABEL, b"base_nonce", &[mode], psk_id_hash.as_slice(), &info_hash]);
+        let exporter_secret = K::Expand::derive_secret_others(secret.as_ref(), [&Self::KeySize::U16.to_be_bytes(),LabelHpkeV1::LABEL, SuiteId::LABEL, b"exp", &[mode], psk_id_hash.as_slice(), &info_hash]);
         (key, base_nonce, exporter_secret)
     }
 
@@ -251,22 +228,12 @@ where   K: TwoStepKdf + 'static + Default,
 impl<K,L> HpkeKdfExporter<L> for HpkeTwoStageKdf<K> 
 where   K: TwoStepKdf + 'static + Default,
         <K::Extract as KdfFixed>::OutputSize: ArraySize,
-        // K::Extract: KdfLabelled,
-        // K::Expand: KdfLabelled,
-        //K: GetExtract<T=K::Extract>,
-        //K: GetExpand<T=K::Expand>,
         L: ArraySize,
         K::Expand: Kdf<L>,
 {
-    /// Exporter secret length, for TwoStepKdfs this is the length of the extracted secret
-    //type LE = <K::Extract as KdfFixed>::OutputSize;
-    /// Kdf type, this is used to allow the Kdf to be used as part of a KEM or KDF which requires a specific Kdf type
-    //type K = K::Expand;
-
-    fn derive_exported_value(exporter_secret: &Array<u8, Self::ExporterSecretSize>, exporter_context: &[u8], label: &'static [u8]) -> Array<u8,L>
+    fn derive_exported_value(exporter_secret: &Array<u8, Self::KeySize>, exporter_context: &[u8], label: &'static [u8]) -> Array<u8,L>
     {
         K::Expand::derive_secret_others(exporter_secret.as_ref(), [&L::U16.to_be_bytes(), LabelHpkeV1::LABEL, label, b"sec", exporter_context])
-        //self.kdf.get_expand().derive_self_secret_label_other (&exporter_secret, b"sec", exporter_context).map_err(|_|())
     }
 }
 
@@ -275,7 +242,6 @@ where   K: TwoStepKdf + 'static + Default,
 /// Defined in draft_ietf_hpke_pq
 /// 
 pub struct HpkeOneStageKdf<K, E> {
-    //kdf: K, 
     phantom: PhantomData<K>,
     phantom2: PhantomData<E>
 }
@@ -288,84 +254,21 @@ impl<K: Default, E: ArraySize> Default for HpkeOneStageKdf<K,E>
 }
 
 /// This KDF is used in the one stage KDF mode defined in draft-ietf-hpke-pq
-/// THis function accept the underlying KDF and returns a HpkeOneStageKdf object
-// impl<K: Kdf + Default, E: ArraySize> From<K> for HpkeOneStageKdf<K,E>
-// {
-//     fn from(kdf: K) -> Self {
-//         Self { kdf, phantom: PhantomData }
-//     }
-// }
-
-impl<K: Default, E: ArraySize> HpkeExporterSecret for HpkeOneStageKdf<K,E>
+impl<K: Default, E: ArraySize> KeySizeUser for HpkeOneStageKdf<K,E>
 {
-    type ExporterSecretSize = E;
+    type KeySize = E;
 }
 
 
-//impl<K: Kdf + Default + KdfLabelled + Clone, E: ArraySize> HpkeKdf for HpkeOneStageKdf<K,E>
 impl<K: Default + Clone, E: ArraySize, LK: ArraySize, LN: ArraySize> HpkeKdf<LK, LN> for HpkeOneStageKdf<K,E>
 where LN: Add<E>,
-    LK: ArraySize + Add<<LN as Add<E>>::Output>,
-    Diff<Diff<Sum<LK, Sum<LN, E>>, LK>, LN>: ArraySize, <LK as Add<<LN as Add<E>>::Output>>::Output: Sub<LK>, <<LK as Add<<LN as Add<E>>::Output>>::Output as Sub<LK>>::Output: Sub<LN>,
-
-    LN: Add<E>,
-    Sum<LN, E>: ArraySize,
-    LK: Add<Sum<LN, E>>,
-    Sum<LK, Sum<LN, E>>: ArraySize,
-    Sum<LK, Sum<LN, E>>: Sub<LK>,
-    Diff<Sum<LK, Sum<LN, E>>, LK>: ArraySize,
-    Diff<Sum<LK, Sum<LN, E>>, LK>: Sub<LN, Output=E>,
-    Diff<Diff<Sum<LK, Sum<LN, E>>, LK>, LN>: ArraySize,
+    LK: Add<Sum<LN,E>>,
+    Sum<LK, Sum<LN, E>>: ArraySize + Sub<LK>,
+    Diff<Sum<LK, Sum<LN, E>>, LK>: ArraySize + Sub<LN, Output=E>,
     K: Kdf<Sum<LK, Sum<LN, E>>>,
-        //K2: Kdf + Default,
 {
-    //type K = K;
-
-    /// Length of exporter secret is defined by a parameter in the struct
-    //type ExporterSize = E;
-
-    // fn derive<'a, LK: ArraySize, LN: ArraySize, LE: ArraySize> (&self, is_auth: bool, shared_secret: &'a[u8], info: &'a[u8], psk: Option<Psk> ) 
-    //     -> Result<(Array<u8, LK>, Array<u8, LN>, Array<u8, LE>), ()>
-    // where 
-    //     LN: Add<LE>,
-    //     Sum<LN, LE>: ArraySize,
-    //     LK: Add<Sum<LN,LE>>,
-    //     Sum<LK, Sum<LN,LE>>: ArraySize,
-    //     Sum<LK, Sum<LN, LE>>: Sub<LK>,
-    //     Diff<Sum<LK, Sum<LN, LE>>, LK>: ArraySize,
-    //     Diff<Sum<LK, Sum<LN, LE>>, LK>: Sub<LN, Output=LE>,
-    //     Diff<Diff<Sum<LK, Sum<LN, LE>>, LK>, LN>: ArraySize,
-
-    // {
-    //     let mode = match (is_auth, psk.is_some()) {
-    //         (false, false) => mode_id::MODE_BASE,
-    //         (false, true) => mode_id::MODE_PSK,
-    //         (true, false) => mode_id::MODE_AUTH,
-    //         (true, true) => mode_id::MODE_AUTH_PSK
-    //     };
-
-    //     let psk = psk.unwrap_or_default();
-        
-    //     // let derivation_output: Array<u8, Sum<LK, Sum<LN, LE>>> = self.kdf.derive_self_secrets_label_others(
-    //     //     [(psk.val.len() as u16).to_be_bytes().as_slice(), &psk.val, &(shared_secret.len() as u16).to_be_bytes(), shared_secret],
-    //     //     b"secret",
-    //     //     [ &[mode], (psk.id.len() as u16).to_be_bytes().as_slice(), psk.id, &(info.len() as u16).to_be_bytes(), info]).map_err(|_|())?;
-    //     let kdf = LenLabelledKdf::<_, LabelSecret>::from(&self.kdf);
-    //     let kdf = OutLenKdfWrapper::from(&kdf);
-    //     let derivation_output: Array<u8, Sum<LK, Sum<LN, LE>>> = kdf.derive_self_secrets_others(
-    //         [(psk.val.len() as u16).to_be_bytes().as_slice(), &psk.val, &(shared_secret.len() as u16).to_be_bytes(), shared_secret],
-    //         //b"secret",
-    //         [ &[mode], (psk.id.len() as u16).to_be_bytes().as_slice(), psk.id, &(info.len() as u16).to_be_bytes(), info]).map_err(|_|())?;
-
-    //     let (key, remainder) = derivation_output.split::<LK>();
-    //     let (nonce, export) = remainder.split::<LN>();
-
-    //     Ok((key, nonce, export))
-    // }
-    
-    fn derive<'a, /*LK: ArraySize, LN: ArraySize, LE: ArraySize,*/ LB: Label> ( is_auth: bool, shared_secret: &'a[u8], info: &'a[u8], psk: Option<Psk> ) 
-        -> (Array<u8,LK>, Array<u8,LN>, Array<u8,Self::ExporterSecretSize>)
-    // 
+    fn derive<'a, LB: Label> ( is_auth: bool, shared_secret: &'a[u8], info: &'a[u8], psk: Option<Psk> ) 
+        -> (Array<u8,LK>, Array<u8,LN>, Array<u8,Self::KeySize>)
     {
         let mode = match (is_auth, psk.is_some()) {
             (false, false) => mode_id::MODE_BASE,
@@ -376,31 +279,13 @@ where LN: Add<E>,
 
         let psk = psk.unwrap_or_default();
         
-        // let derivation_output: Array<u8, Sum<LK, Sum<LN, LE>>> = self.kdf.derive_self_secrets_label_others(
-        //     [(psk.val.len() as u16).to_be_bytes().as_slice(), &psk.val, &(shared_secret.len() as u16).to_be_bytes(), shared_secret],
-        //     b"secret",
-        //     [ &[mode], (psk.id.len() as u16).to_be_bytes().as_slice(), psk.id, &(info.len() as u16).to_be_bytes(), info]).map_err(|_|())?;
-        // let kdf = LenLabelledKdf::<_, LabelSecret>::from(&self.kdf);
-        // let kdf = OutLenKdfWrapper::from(&kdf);
-        // let derivation_output: Array<u8, Sum<LK, Sum<LN, LE>>> = kdf.derive_self_secrets_others(
-        //     [(psk.val.len() as u16).to_be_bytes().as_slice(), &psk.val, &(shared_secret.len() as u16).to_be_bytes(), shared_secret],
-        //     //b"secret",
-        //     [ &[mode], (psk.id.len() as u16).to_be_bytes().as_slice(), psk.id, &(info.len() as u16).to_be_bytes(), info]).map_err(|_|())?;
-        //type Kdf2<'a> = OutLenKdfWrapper::<'a, LenLabelledKdf<'a, K2, LabelSecret>>;
-
-        // let derivation_output: Array<u8, Sum<LK, Sum<LN, LE>>> = OutLenKdfWrapper2::<LenLabelledKdf2<K, LabelSecret>>::derive_secrets_others(
-        //      [(psk.val.len() as u16).to_be_bytes().as_slice(), &psk.val, &(shared_secret.len() as u16).to_be_bytes(), shared_secret],
-        //      //b"secret",
-        //      [ &[mode], (psk.id.len() as u16).to_be_bytes().as_slice(), psk.id, &(info.len() as u16).to_be_bytes(), info]).map_err(|_|())?;
-
-        let derivation_output: Array<u8, Sum<LK, Sum<LN, Self::ExporterSecretSize>>> = K::default().derive_self_secrets_others(
+        let derivation_output: Array<u8, Sum<LK, Sum<LN, Self::KeySize>>> = K::derive_secrets_others(
             [(psk.val.len() as u16).to_be_bytes().as_slice(), &psk.val, &(shared_secret.len() as u16).to_be_bytes(), shared_secret],
-            [LabelHpkeV1::LABEL, LB::LABEL, &[0u8, 6], b"secret", 
-            &Sum::<LK, Sum<LN, Self::ExporterSecretSize>>::U16.to_be_bytes(),
+            [LabelHpkeV1::LABEL, LB::LABEL, &[0, 6], b"secret", 
+            &Sum::<LK, Sum<LN, Self::KeySize>>::U16.to_be_bytes(),
             &[mode], 
             (psk.id.len() as u16).to_be_bytes().as_slice(), psk.id, 
             &(info.len() as u16).to_be_bytes(), info]);
-
 
         let (key, remainder) = derivation_output.split::<LK>();
         let (nonce, export) = remainder.split::<LN>();
@@ -415,11 +300,8 @@ where K: Default + Kdf<L>,
     E: ArraySize,
     L: ArraySize,
 {
-    //type K = K;
-    //type LE = E;
-
-    fn derive_exported_value(exporter_secret: &Array<u8, Self::ExporterSecretSize>, exporter_context: &[u8], label: &'static [u8]) -> Array<u8,L> {
-        K::derive_secret_others(exporter_secret.as_ref(), [&LabelHpkeV1::LABEL, label, &[0u8,3], b"sec", &L::U16.to_be_bytes(),exporter_context])
+    fn derive_exported_value(exporter_secret: &Array<u8, Self::KeySize>, exporter_context: &[u8], label: &'static [u8]) -> Array<u8,L> {
+        K::derive_secret_others(exporter_secret.as_ref(), [&LabelHpkeV1::LABEL, label, &[0,3], b"sec", &L::U16.to_be_bytes(), exporter_context])
     }
 }
 
@@ -461,28 +343,17 @@ mod tests{
         let base_nonce = hex!("56d890e5accaaf011cff4b7d");
         let exporter_secret = hex!("45ff1c2e220db587171952c0592d5f5ebe103f1561a2614e38f2ffd47e99e3f8");
        
-        //let mut kemkdf = KdfForKemUsingHkdf::<Sha256,kem_id::DhKemX25519HkdfSha256>::default(); //new(&pkrm);
-
         let secret: Array<u8, U32> = <Ktf1::<hmac::HmacReset<sha2::Sha256>> as KdfFixed>
-                ::derive_secret_others_fixed( &raw_shared_secret, [LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemX25519HkdfSha256>::LABEL, LabelKemExtract::LABEL]);
-        //let secret: Array<u8, HmacSize<Self>> = <Ktf1::<HmacType<Self>> as kdfs::Kdf>
-        //            ::derive_secrets_others( std::iter::once(ss.as_ref()), [LabelHpkeV1::LABEL, LabelKem::<<Self as KemParams>::KemId>::LABEL, LabelKemExtract::LABEL]).unwrap();
+                ::derive_secret_others_fixed( &raw_shared_secret, [LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemX25519HkdfSha256>::LABEL, b"eae_prk"]);
             
-        //<<kdfs::rfc5869_hkdf::Hkdf::<<Self as KemParams>::Digest> as TwoStepKdf>::Expand as kdfs::Kdf2<L>>
         let shared_secret2 = <Kpf1::<hmac::HmacReset<sha2::Sha256>,u8> as kdfs::Kdf<U32>>
-                ::derive_secret_others(secret.as_ref(), [&U32::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemX25519HkdfSha256>::LABEL, LabelKemExpand::LABEL, &pkEm, &pkRm]);
-
-
-                
-        
-        //let shared_secret2: Array<u8, U32> = kemkdf.derive_self_secret_others(&raw_shared_secret, [pkEm.as_ref(), pkRm.as_ref()]).unwrap();
+                ::derive_secret_others(secret.as_ref(), [&U32::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemX25519HkdfSha256>::LABEL, b"shared_secret", &pkEm, &pkRm]);
 
         assert_eq! ( shared_secret2, shared_secret);
 
         
         let (key2, base_nonce2, exporter_secret2): (Array<u8, U16>,Array<u8, U12>,_) = HpkeTwoStageKdf::<Tkdf<Ktf1<HmacReset<Sha256>>, Kpf1<HmacReset<sha2::Sha256>,u8>>>::
-            derive::</*U16, U12, U32,*/ LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>> (false, &shared_secret, &info, None);// ::>Kdf.derive2::<U16, U12, U32>
-
+            derive::<LabelKdf::<kem_id::DhKemX25519HkdfSha256,kdf_id::HkdfSha256,aead_id::Aes128Gcm>> (false, &shared_secret, &info, None);
 
         assert_eq! ( key2, key);
         assert_eq! ( base_nonce2, base_nonce);
@@ -519,19 +390,16 @@ mod tests{
             ca61e26d494f4855dff0d0165f27ce57756f7f16baca006539bb8e4518987ba61048
             0ac03efa8");
        
-        // let result: Array<u8, U32> = KdfForKemUsingHkdf::<sha2::Sha256,kem_id::DhKemP256HkdfSha256>::derive_secret_others(&raw_shared_secret, [pkem.as_ref(), pkrm.as_ref()]).unwrap();
-        // assert! ( result.0 == shared_secret);
-
         let secret: Array<u8, U32> = <Ktf1::<hmac::HmacReset<sha2::Sha256>> as KdfFixed>
-                ::derive_secret_others_fixed( &raw_shared_secret, [LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemP256HkdfSha256>::LABEL, LabelKemExtract::LABEL]);
+                ::derive_secret_others_fixed( &raw_shared_secret, [LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemP256HkdfSha256>::LABEL, b"eae_prk"]);
         
         let result = <Kpf1::<hmac::HmacReset<sha2::Sha256>,u8> as kdfs::Kdf<U32>>
-                ::derive_secret_others(secret.as_ref(), [&U32::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemP256HkdfSha256>::LABEL, LabelKemExpand::LABEL, &pkem, &pkrm]);
+                ::derive_secret_others(secret.as_ref(), [&U32::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemP256HkdfSha256>::LABEL, b"shared_secret", &pkem, &pkrm]);
 
         assert! ( result == shared_secret);
        
         let (key2, nonce, exporter_secret2): (Array<u8, U16>,Array<u8,U12>,_) = HpkeTwoStageKdf::<Tkdf<Ktf1<HmacReset<Sha512>>, Kpf1<HmacReset<Sha512>,u8>>>::derive::</*U16, U12, U64,*/ LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha512,aead_id::Aes128Gcm>>
-            (false, &shared_secret, &info, None);// ::>Kdf.derive2::<U16, U12, U32>
+            (false, &shared_secret, &info, None);
 
         assert! ( key2 == key );
         assert! ( nonce == base_nonce);
@@ -565,21 +433,17 @@ mod tests{
         let exporter_secret=hex!("4f9bd9b3a8db7d7c3a5b9d44fdc1f6e37d5d77689ade5ec44a7242016e6aa205");
 
      
-        // let result: Array<u8, U32> = KdfForKemUsingHkdf::<Sha256,kem_id::DhKemP256HkdfSha256>::derive_secret_others(&raw_shared_secret, [pkem.as_ref(), pkrm.as_ref()]).unwrap(); 
         let secret = <Ktf1::<HmacReset<Sha256>> as KdfFixed>
-                ::derive_secret_others_fixed( &raw_shared_secret, [LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemP256HkdfSha256>::LABEL, LabelKemExtract::LABEL]);
+                ::derive_secret_others_fixed( &raw_shared_secret, [LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemP256HkdfSha256>::LABEL, b"eae_prk"]);
         
         let result = <Kpf1::<HmacReset<Sha256>,u8> as kdfs::Kdf<U32>>
-                ::derive_secret_others(secret.as_ref(), [&U32::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemP256HkdfSha256>::LABEL, LabelKemExpand::LABEL, &pkem, &pkrm]);
+                ::derive_secret_others(secret.as_ref(), [&U32::U16.to_be_bytes(), LabelHpkeV1::LABEL, LabelKem::<kem_id::DhKemP256HkdfSha256>::LABEL, b"shared_secret", &pkem, &pkrm]);
 
 
         assert! ( result == shared_secret);
 
-        // let labelled_kdf = HpkeTwoStageKdf::from(KdfForKdfUsingHkdf::<sha2::Sha256, kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>::default());
-        // let (key2, nonce, exporter_secret2) = labelled_kdf.derive::<U32, U12, U32>( false, &shared_secret, &info, None).unwrap();
-        
         let (key2, nonce, exporter_secret2): (Array<u8, U32>,Array<u8, U12>,_) = HpkeTwoStageKdf::<Tkdf<Ktf1<HmacReset<Sha256>>, Kpf1<HmacReset<Sha256>,u8>>>::derive::</*U32, U12, U32,*/ LabelKdf::<kem_id::DhKemP256HkdfSha256,kdf_id::HkdfSha256,aead_id::ChaCha20Poly1305>>
-            (false, &shared_secret, &info, None);// ::>Kdf.derive2::<U16, U12, U32>
+            (false, &shared_secret, &info, None);
 
         assert! ( key2 == key );
         assert! ( nonce == base_nonce);

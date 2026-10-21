@@ -64,7 +64,7 @@ fn openssl_encap_x25519 ()
     
     //let recipient_secret_key = x25519_dalek::StaticSecret::from(ec_priv);
 
-    let decapsulator = HpkeKemX25519HkdfSha256::try_from_bytes_decap(&ec_priv.into()); //::from_private_key(recipient_secret_key);
+    let decapsulator = HpkeKemX25519HkdfSha256::try_from_bytes_decap(&ec_priv.into()).unwrap(); //::from_private_key(recipient_secret_key);
     let k_recv: Array<u8, U32> = decapsulator.try_decapsulate(&encapped_key.into()).unwrap();
 
     assert! ( k_recv == key);
@@ -183,7 +183,7 @@ fn test_apple_hpke_p384() {
     let encapsulated_key = &BASE64_STANDARD.decode("BLAb2Q+7+yjD17+CPCwooGxwcmFELXI6xrY1/h0ijHdFLJdVA4htb+edFcNa+yMEyFZ4ks0cVQQkaaXAgrOg3RHFn7zeAis3Pq9ZnjTBcggNgLHSOlc/KjIBfYvjk25rgg==").unwrap();
     let ciphertext = &BASE64_STANDARD.decode("LHtZuQKFqCwqp4C142GFMi4GvFwt").unwrap();
 
-    let decapsulator = HpkeKemP384HkdfSha384::try_from_bytes_decap(&private_raw.as_slice().try_into().unwrap());
+    let decapsulator = HpkeKemP384HkdfSha384::try_from_bytes_decap(&private_raw.as_slice().try_into().unwrap()).unwrap();
     
     let encapsulator = decapsulator.encapsulation_key();
     assert_eq! ( &encapsulator.to_bytes().as_slice()[1..], public_key);
@@ -296,7 +296,7 @@ fn test_ml_kem_768_hpke () {
     let encapsulator_as_bytes = encapsulator.to_bytes();
         
     //let encryptor = hpke::hpke_types::draft_ietf_hpke_pq::HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_encapsulator(encapsulator);
-    let encryptor = HpkeIesMlKem768Sha256Aes128Gcm::encryptor_from_bytes(&encapsulator_as_bytes.as_slice().try_into().unwrap());
+    let encryptor = HpkeIesMlKem768Sha256Aes128Gcm::try_encryptor_from_bytes(&encapsulator_as_bytes.as_slice().try_into().unwrap()).unwrap();
     let (encapsulated_key, encrypted_payload) = encryptor.single_shot_seal(&mut OsRng, b"Hello World".as_ref(), b"info", None).unwrap();
 
     let decryptor = HpkeIesMlKem768Sha256Aes128Gcm::decryptor_from_decapsulator(decapsulator);

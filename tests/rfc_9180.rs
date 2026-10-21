@@ -817,7 +817,7 @@ fn test_rfc_9180_a_5_1 () {
     let _nonce= hex!("726b4390ed2209809f58c693");
     let ct= hex!("6469c41c5c81d3aa85432531ecf6460ec945bde1eb428cb2fedf7a29f5a685b4 ccb0d057f03ea2952a27bb458b");
 
-    let he_encryptor = HpkeIesP256Sha256ChaCha20Poly1305::encryptor_from_bytes(&pkrm.into());
+    let he_encryptor = HpkeIesP256Sha256ChaCha20Poly1305::try_encryptor_from_bytes(&pkrm.into()).unwrap();
     //let he_decryptor = HpkeIesP256Sha256ChaCha20Poly1305::try_decryptor_from_bytes(&skrm.into());
     let he_decryptor = decryptor;
     
@@ -912,7 +912,7 @@ fn test_rfc_9180_a_6_1 () {
     let _nonce = hex!("55ff7a7d739c69f44b25447b");
     let ct = hex!("170f8beddfe949b75ef9c387e201baf4132fa7374593dfafa90768788b7b2b20 0aafcc6d80ea4c795a7c5b841a");
 
-    let he_encryptor = HpkeIesP521Sha512Aes256Gcm::encryptor_from_bytes(&pkRm.into());
+    let he_encryptor = HpkeIesP521Sha512Aes256Gcm::try_encryptor_from_bytes(&pkRm.into()).unwrap();
     let he_decryptor = HpkeIesP521Sha512Aes256Gcm::try_decryptor_from_slice(&skRm).unwrap();
 
     //let mut pred_rng = PredictableRng::new(&skEm);
@@ -1182,7 +1182,7 @@ fn test_rfc_9180_a_7_1 () {
     assert_eq! ( encapsulatorE.to_bytes(), pkEm);
     assert_eq! ( decapsulatorE.to_bytes(), skEm);
 
-    let he_encryptor = HpkeIesX25519Sha256ExportOnly::encryptor_from_bytes(&pkRm.into());
+    let he_encryptor = HpkeIesX25519Sha256ExportOnly::try_encryptor_from_bytes(&pkRm.into()).unwrap();
 
     //let mut pred_rng = PredictableRng::new(&skEm);
     
